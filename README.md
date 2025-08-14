@@ -1,38 +1,164 @@
-### 3 分钟了解如何进入开发
+# Plumelog-Loguru
 
-欢迎使用云效代码管理 Codeup，通过阅读以下内容，你可以快速熟悉 Codeup ，并立即开始今天的工作。
+一个现代化的 Python 库，为 Loguru 提供与 Plumelog 系统的集成功能，支持异步 Redis 日志传输。
 
-### 提交**文件**
+## ✨ 特性
 
-Codeup 支持两种方式进行代码提交：网页端提交，以及本地 Git 客户端提交。
+- 🚀 **异步处理**: 基于 asyncio 的高性能异步日志传输
+- 📦 **批量优化**: 智能批量处理，减少 Redis 连接开销
+- 🔒 **类型安全**: 完整的 Python 3.10+ 类型提示
+- 🔄 **智能重试**: 指数退避重试机制，确保日志不丢失
+- 🏊 **连接池**: Redis 连接池管理，提高并发性能
+- ⚙️ **灵活配置**: 基于 Pydantic 的配置管理，支持环境变量
+- 🧵 **线程安全**: 多线程环境下的安全操作
 
-* 如需体验本地命令行操作，请先安装 Git 工具，安装方法参见[安装Git](https://help.aliyun.com/document_detail/153800.html)。
+## 📦 安装
 
-* 如需体验 SSH 方式克隆和提交代码，请先在平台账号内配置 SSH 公钥，配置方法参见[配置 SSH 密钥](https://help.aliyun.com/document_detail/153709.html)。
+使用 uv 安装（推荐）：
 
-* 如需体验 HTTP 方式克隆和提交代码，请先在平台账号内配置克隆账密，配置方法参见[配置 HTTPS 克隆账号密码](https://help.aliyun.com/document_detail/153710.html)。
+```bash
+uv add plumelog-loguru
+```
 
-现在，你可以在 Codeup 中提交代码文件了，跟着文档「[__提交第一行代码__](https://help.aliyun.com/document_detail/153707.html?spm=a2c4g.153710.0.0.3c213774PFSMIV#6a5dbb1063ai5)」一起操作试试看吧。
+使用 pip 安装：
 
-<img src="https://img.alicdn.com/imgextra/i3/O1CN013zHrNR1oXgGu8ccvY_!!6000000005235-0-tps-2866-1268.jpg" width="100%" />
+```bash
+pip install plumelog-loguru
+```
 
+## 🚀 快速开始
 
-### 进行代码检测
+### 基本使用
 
-开发过程中，为了更好的维护你的代码质量，你可以开启 Codeup 内置开箱即用的「[代码检测服务](https://help.aliyun.com/document_detail/434321.html)」，开启后提交或合并请求的变更将自动触发检测，识别代码编写规范和安全漏洞问题，并及时提供结果报表和修复建议。
+```python
+from loguru import logger
+from plumelog_loguru import create_redis_sink
 
-<img src="https://img.alicdn.com/imgextra/i2/O1CN01BRzI1I1IO0CR2i4Aw_!!6000000000882-0-tps-2862-1362.jpg" width="100%" />
+# 使用默认配置添加 Redis sink
+logger.add(create_redis_sink())
 
-### 开展代码评审
+# 开始记录日志
+logger.info("Hello, Plumelog!")
+logger.error("这是一个错误日志")
+```
 
-功能开发完毕后，通常你需要发起「[代码评审并执行合并](https://help.aliyun.com/document_detail/153872.html)」，Codeup 支持多人协作的代码评审服务，你可以通过「[保护分支设置合并规则](https://help.aliyun.com/document_detail/153873.html?spm=a2c4g.203108.0.0.430765d1l9tTRR#p-4on-aep-l5q)」策略及「[__合并请求设置__](https://help.aliyun.com/document_detail/153874.html?spm=a2c4g.153871.0.0.3d38686cJpcdJI)」对合并过程进行流程化管控，同时提供在线代码评审及冲突解决能力，让评审过程更加流畅。
+### 自定义配置
 
-<img src="https://img.alicdn.com/imgextra/i1/O1CN01MaBDFH1WWcGnQqMHy_!!6000000002796-0-tps-2592-1336.jpg" width="100%" />
+```python
+from loguru import logger
+from plumelog_loguru import create_redis_sink, PlumelogSettings
 
-### 成员协作
+# 创建自定义配置
+config = PlumelogSettings(
+    app_name="my_application",
+    env="production",
+    redis_host="redis.example.com",
+    redis_port=6379,
+    redis_password="your_password",
+    batch_size=50,
+    batch_interval_seconds=1.0
+)
 
-是时候邀请成员一起编写卓越的代码工程了，请点击左下角「成员」邀请你的小伙伴开始协作吧！
+# 使用自定义配置
+logger.add(create_redis_sink(config))
+```
 
-### 更多
+### 环境变量配置
 
-Git 使用教学、高级功能指引等更多说明，参见[Codeup帮助文档](https://help.aliyun.com/document_detail/153402.html)。
+支持通过环境变量进行配置，所有配置项都支持 `PLUMELOG_` 前缀：
+
+```bash
+export PLUMELOG_APP_NAME=my_app
+export PLUMELOG_ENV=production
+export PLUMELOG_REDIS_HOST=localhost
+export PLUMELOG_REDIS_PORT=6379
+export PLUMELOG_REDIS_PASSWORD=secret
+export PLUMELOG_BATCH_SIZE=100
+```
+
+### 异步上下文使用
+
+```python
+import asyncio
+from loguru import logger
+from plumelog_loguru import RedisSink, PlumelogSettings
+
+async def main():
+    config = PlumelogSettings(app_name="async_app")
+    
+    async with RedisSink(config) as sink:
+        logger.add(sink)
+        logger.info("异步环境中的日志")
+        await asyncio.sleep(1)
+
+asyncio.run(main())
+```
+
+## ⚙️ 配置选项
+
+| 配置项 | 环境变量 | 默认值 | 说明 |
+|--------|----------|--------|------|
+| `app_name` | `PLUMELOG_APP_NAME` | `"default"` | 应用名称 |
+| `env` | `PLUMELOG_ENV` | `"dev"` | 运行环境 |
+| `redis_host` | `PLUMELOG_REDIS_HOST` | `"localhost"` | Redis 主机地址 |
+| `redis_port` | `PLUMELOG_REDIS_PORT` | `6379` | Redis 端口 |
+| `redis_db` | `PLUMELOG_REDIS_DB` | `0` | Redis 数据库编号 |
+| `redis_password` | `PLUMELOG_REDIS_PASSWORD` | `None` | Redis 密码 |
+| `redis_key` | `PLUMELOG_REDIS_KEY` | `"plume_log_list"` | Redis 队列键名 |
+| `batch_size` | `PLUMELOG_BATCH_SIZE` | `100` | 批量发送大小 |
+| `batch_interval_seconds` | `PLUMELOG_BATCH_INTERVAL_SECONDS` | `2.0` | 批量发送间隔（秒） |
+| `queue_max_size` | `PLUMELOG_QUEUE_MAX_SIZE` | `10000` | 内存队列最大大小 |
+| `retry_count` | `PLUMELOG_RETRY_COUNT` | `3` | 重试次数 |
+| `max_connections` | `PLUMELOG_MAX_CONNECTIONS` | `5` | Redis 最大连接数 |
+
+## 🏗️ 架构设计
+
+本库采用现代 Python 设计模式：
+
+- **数据模型**: 使用 Pydantic 数据类替代字典，提供类型安全
+- **异步优先**: 基于 asyncio 的非阻塞设计
+- **组件解耦**: 清晰的模块边界和依赖注入
+- **错误处理**: 全面的异常处理和降级策略
+
+## 🔧 开发
+
+### 环境准备
+
+```bash
+# 克隆项目
+git clone <repository-url>
+cd plumelog-loguru
+
+# 安装开发依赖
+uv sync --all-extras
+
+# 运行测试
+uv run pytest
+
+# 代码格式化
+uv run black src tests
+uv run isort src tests
+
+# 类型检查
+uv run mypy src
+```
+
+### 项目结构
+
+```
+src/plumelog_loguru/
+├── __init__.py          # 主要 API 导出
+├── config.py            # 配置管理
+├── models.py            # 数据模型定义
+├── extractor.py         # 系统信息提取器
+├── redis_client.py      # 异步 Redis 客户端
+└── redis_sink.py        # Loguru Redis Sink 实现
+```
+
+## 📝 许可证
+
+MIT License
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
