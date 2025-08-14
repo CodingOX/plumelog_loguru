@@ -5,12 +5,20 @@
 """
 
 import asyncio
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from loguru import Record
 else:
     Record = Any
+
+
+class LogSink(Protocol):
+    """Loguru sink协议定义"""
+    def __call__(self, message: Record) -> None:
+        """处理日志消息"""
+        ...
+
 
 from .config import PlumelogSettings
 from .extractor import FieldExtractor
@@ -299,7 +307,7 @@ class RedisSink:
 
         print("[RedisSink] 已成功关闭")
 
-    async def __aenter__(self) -> RedisSink:
+    async def __aenter__(self) -> "RedisSink":  # type: ignore
         """异步上下文管理器入口"""
         await self._ensure_initialized()
         return self
@@ -325,5 +333,4 @@ def create_redis_sink(config: PlumelogSettings | None = None) -> Callable[[Recor
     Returns:
         可用于Loguru的sink函数
     """
-    sink = RedisSink(config)
-    return sink
+    return RedisSink(config)

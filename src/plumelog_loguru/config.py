@@ -4,7 +4,7 @@
 支持从环境变量读取配置，并提供合理的默认值。
 """
 
-from pydantic import Field, computed_field
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .models import RedisConnectionInfo, BatchConfig
@@ -59,7 +59,7 @@ class PlumelogSettings(BaseSettings):
         default=1000, ge=1, description="临时缓存最大容量"
     )
 
-    @computed_field
+    @property
     def redis_connection_info(self) -> RedisConnectionInfo:
         """获取Redis连接信息对象"""
         return RedisConnectionInfo(
@@ -70,7 +70,7 @@ class PlumelogSettings(BaseSettings):
             max_connections=self.max_connections,
         )
 
-    @computed_field
+    @property
     def batch_config(self) -> BatchConfig:
         """获取批处理配置对象"""
         return BatchConfig(

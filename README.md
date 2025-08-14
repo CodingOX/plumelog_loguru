@@ -35,7 +35,7 @@ from loguru import logger
 from plumelog_loguru import create_redis_sink
 
 # 使用默认配置添加 Redis sink
-logger.add(create_redis_sink())
+logger.add(create_redis_sink())  # type: ignore[arg-type]
 
 # 开始记录日志
 logger.info("Hello, Plumelog!")
@@ -60,7 +60,7 @@ config = PlumelogSettings(
 )
 
 # 使用自定义配置
-logger.add(create_redis_sink(config))
+logger.add(create_redis_sink(config))  # type: ignore[arg-type]
 ```
 
 ### 环境变量配置
@@ -87,7 +87,7 @@ async def main():
     config = PlumelogSettings(app_name="async_app")
     
     async with RedisSink(config) as sink:
-        logger.add(sink)
+        logger.add(sink)  # type: ignore[arg-type]
         logger.info("异步环境中的日志")
         await asyncio.sleep(1)
 
@@ -109,7 +109,77 @@ asyncio.run(main())
 | `batch_interval_seconds` | `PLUMELOG_BATCH_INTERVAL_SECONDS` | `2.0` | 批量发送间隔（秒） |
 | `queue_max_size` | `PLUMELOG_QUEUE_MAX_SIZE` | `10000` | 内存队列最大大小 |
 | `retry_count` | `PLUMELOG_RETRY_COUNT` | `3` | 重试次数 |
-| `max_connections` | `PLUMELOG_MAX_CONNECTIONS` | `5` | Redis 最大连接数 |
+| `max_connections` | `PLUMELOG_MAX_connections` | `5` | Redis 最大连接数 |
+
+## 🔍 类型检查与最佳实践
+
+### Pylance/mypy 类型检查说明
+
+由于 Loguru 的 `logger.add()` 方法对 sink 参数有严格的类型要求，您可能会遇到以下类型检查警告：
+
+```text
+"add"的重载与提供的参数不匹配
+无法将"RedisSink"类型的参数分配给函数"add"中类型为"str | PathLikeStr"的参数"sink"
+```
+
+### 推荐解决方案
+
+#### 方案1：使用类型忽略注释（推荐）
+
+```python
+from loguru import logger
+from plumelog_loguru import create_redis_sink
+
+# 推荐做法：添加类型忽略注释
+logger.add(create_redis_sink())  # type: ignore[arg-type]
+```
+
+#### 方案2：使用工厂函数（最佳实践）
+
+```python
+# 始终使用 create_redis_sink() 工厂函数，而不是直接实例化 RedisSink
+sink = create_redis_sink(config)
+logger.add(sink)  # type: ignore[arg-type]
+
+# 避免直接使用 RedisSink 类
+# sink = RedisSink(config)  # 不推荐
+```
+
+### 为什么需要类型忽略？
+
+1. **运行时正常**：代码在运行时完全正常工作，因为 `RedisSink` 实现了 `__call__` 方法
+2. **静态检查限制**：Pylance 无法自动识别 `RedisSink` 符合 `Callable[[Record], None]` 协议
+3. **设计权衡**：这是类型安全与 API 灵活性之间的合理权衡
+
+### 完整示例
+
+```python
+import sys
+from loguru import logger
+from plumelog_loguru import create_redis_sink, PlumelogSettings
+
+def setup_logging():
+    """设置日志系统的推荐方式"""
+    # 移除默认处理器（可选）
+    logger.remove()
+    
+    # 添加控制台输出
+    logger.add(sys.stderr, level="INFO")
+    
+    # 添加 Redis sink
+    config = PlumelogSettings(
+        app_name="my_app",
+        env="production"
+    )
+    redis_sink = create_redis_sink(config)
+    logger.add(redis_sink, level="DEBUG")  # type: ignore[arg-type]
+    
+    return logger
+
+# 在应用启动时调用
+setup_logging()
+logger.info("日志系统已初始化")
+```
 
 ## 🏗️ 架构设计
 
@@ -145,7 +215,7 @@ uv run mypy src
 
 ### 项目结构
 
-```
+```text
 src/plumelog_loguru/
 ├── __init__.py          # 主要 API 导出
 ├── config.py            # 配置管理

@@ -132,7 +132,7 @@ class TestRedisConnectionInfo:
                 host="localhost",
                 port=70000,  # 超出端口范围
                 db=0
-            )
+            )  # type: ignore
 
         # 测试数据库编号验证
         with pytest.raises(ValueError):
@@ -140,7 +140,7 @@ class TestRedisConnectionInfo:
                 host="localhost",
                 port=6379,
                 db=-1  # 负数数据库编号
-            )
+            )  # type: ignore
 
 
 class TestBatchConfig:

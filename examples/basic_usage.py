@@ -14,7 +14,7 @@ async def basic_example():
 
     # 使用默认配置创建Redis sink
     redis_sink = create_redis_sink()
-    logger.add(redis_sink, level="INFO")
+    logger.add(redis_sink, level="INFO")  # type: ignore[arg-type]
 
     # 记录不同级别的日志
     logger.info("这是一条信息日志")
@@ -43,7 +43,7 @@ async def custom_config_example():
 
     # 使用自定义配置
     redis_sink = create_redis_sink(config)
-    logger.add(redis_sink, level="DEBUG")
+    logger.add(redis_sink, level="DEBUG")  # type: ignore[arg-type]
 
     # 记录一些日志
     logger.debug("调试信息")
@@ -65,7 +65,7 @@ async def context_manager_example():
 
     # 使用异步上下文管理器
     async with RedisSink(config) as sink:
-        logger.add(sink)
+        logger.add(sink)  # type: ignore
 
         logger.info("在上下文管理器中记录日志")
         logger.warning("这将自动处理资源清理")
@@ -119,7 +119,7 @@ async def main():
 
     # 设置Redis sink（使用默认配置用于所有示例）
     default_sink = create_redis_sink()
-    logger.add(default_sink, level="DEBUG")
+    logger.add(default_sink, level="DEBUG")  # type: ignore[arg-type]
 
     try:
         # 运行各种示例
