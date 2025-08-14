@@ -4,9 +4,11 @@
 使用现代异步编程模式和强类型，确保高性能和可靠性。
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
-from typing import Any, Optional
+from typing import Any
 
 import redis.asyncio as redis
 from redis.exceptions import ConnectionError, RedisError
@@ -29,8 +31,8 @@ class AsyncRedisClient:
             config: Plumelog配置对象
         """
         self.config = config
-        self.pool: Optional[redis.ConnectionPool] = None
-        self.redis: Optional[redis.Redis[str]] = None
+        self.pool: redis.ConnectionPool | None = None
+        self.redis: redis.Redis | None = None
         self._connected = False
 
         # 从配置中获取重试参数
@@ -79,9 +81,9 @@ class AsyncRedisClient:
         """断开Redis连接并清理资源"""
         try:
             if self.redis:
-                await self.redis.aclose()  # type: ignore
+                await self.redis.aclose()
             if self.pool:
-                await self.pool.aclose()  # type: ignore
+                await self.pool.aclose()
             self._connected = False
             print("[Plumelog] Redis连接已断开")
         except Exception as e:
@@ -91,9 +93,9 @@ class AsyncRedisClient:
         """错误时的清理操作"""
         try:
             if self.redis:
-                await self.redis.aclose()  # type: ignore
+                await self.redis.aclose()
             if self.pool:
-                await self.pool.aclose()  # type: ignore
+                await self.pool.aclose()
         except Exception:
             pass  # 忽略清理时的错误
         finally:
@@ -111,7 +113,7 @@ class AsyncRedisClient:
         return self._connected and self.redis is not None
 
     async def send_log_record(
-            self, log_record: LogRecord, key: Optional[str] = None
+            self, log_record: LogRecord, key: str | None = None
     ) -> bool:
         """发送单条日志记录到Redis
 
@@ -139,7 +141,7 @@ class AsyncRedisClient:
                 )
 
                 # 发送单条日志
-                result = await self.redis.lpush(redis_key, log_json)
+                result: int = await self.redis.lpush(redis_key, log_json)  # type: ignore[misc]
                 if result == 0:
                     raise RedisError("Redis lpush返回结果为0")
 
@@ -153,7 +155,7 @@ class AsyncRedisClient:
         return False
 
     async def send_log_records(
-            self, log_records: list[LogRecord], key: Optional[str] = None
+            self, log_records: list[LogRecord], key: str | None = None
     ) -> bool:
         """批量发送日志记录到Redis
 
@@ -236,9 +238,9 @@ class AsyncRedisClient:
 
     async def __aexit__(
             self,
-            exc_type: Optional[type[BaseException]],
-            exc_val: Optional[BaseException],
-            exc_tb: Optional[Any],
+            exc_type: type[BaseException] | None,
+            exc_val: BaseException | None,
+            exc_tb: Any | None,
     ) -> None:
         """异步上下文管理器出口"""
         await self.disconnect()

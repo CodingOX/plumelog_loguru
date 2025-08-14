@@ -7,7 +7,6 @@ import datetime
 import inspect
 import socket
 import threading
-from typing import Optional
 
 from .models import CallerInfo, SystemInfo
 
@@ -23,8 +22,8 @@ class FieldExtractor:
         """初始化字段提取器"""
         self._seq_counter: int = 0
         self._lock: threading.Lock = threading.Lock()
-        self._server_name: Optional[str] = None
-        self._host_name: Optional[str] = None
+        self._server_name: str | None = None
+        self._host_name: str | None = None
 
     def get_server_name(self) -> str:
         """获取服务器IP地址
@@ -50,6 +49,7 @@ class FieldExtractor:
                     # 最后的备用方案
                     self._server_name = "127.0.0.1"
 
+        assert self._server_name is not None
         return self._server_name
 
     def get_host_name(self) -> str:
@@ -64,6 +64,7 @@ class FieldExtractor:
             except Exception:
                 self._host_name = "localhost"
 
+        assert self._host_name is not None
         return self._host_name
 
     def get_thread_name(self) -> str:
@@ -113,7 +114,7 @@ class FieldExtractor:
             method_name = frame.f_code.co_name
 
             # 获取类名
-            class_name: Optional[str] = None
+            class_name: str | None = None
             if "self" in frame.f_locals:
                 class_name = frame.f_locals["self"].__class__.__name__
             elif "cls" in frame.f_locals:

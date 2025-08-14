@@ -4,7 +4,7 @@
 所有模型都包含完整的类型提示和验证逻辑。
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -63,8 +63,8 @@ class CallerInfo(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    class_name: Optional[str] = Field(None, description="调用者类名")
-    method_name: Optional[str] = Field(None, description="调用者方法名")
+    class_name: str | None = Field(None, description="调用者类名")
+    method_name: str | None = Field(None, description="调用者方法名")
 
     @property
     def class_name_safe(self) -> str:
@@ -101,7 +101,7 @@ class RedisConnectionInfo(BaseModel):
     host: str = Field(..., description="Redis主机地址")
     port: int = Field(..., ge=1, le=65535, description="Redis端口")
     db: int = Field(..., ge=0, description="Redis数据库编号")
-    password: Optional[str] = Field(None, description="Redis密码")
+    password: str | None = Field(None, description="Redis密码")
     max_connections: int = Field(5, ge=1, description="最大连接数")
 
 

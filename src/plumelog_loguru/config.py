@@ -40,19 +40,19 @@ class PlumelogSettings(BaseSettings):
     # 批处理配置
     queue_max_size: int = Field(default=10000, ge=1, description="内存队列最大大小")
     batch_size: int = Field(default=100, ge=1, description="批量发送大小")
-    batch_interval_seconds: int = Field(
-        default=2, gt=0, description="批量发送间隔时间（秒）"
+    batch_interval_seconds: float = Field(
+        default=2.0, gt=0, description="批量发送间隔时间（秒）"
     )
 
     # 重试配置
     retry_count: int = Field(default=3, ge=1, description="Redis发送重试次数")
-    retry_delay: int = Field(default=2, gt=0, description="重试延迟时间（秒）")
+    retry_delay: float = Field(default=2.0, gt=0, description="重试延迟时间（秒）")
 
     # 连接超时配置
-    socket_connect_timeout: int = Field(
-        default=5, gt=0, description="Socket连接超时时间（秒）"
+    socket_connect_timeout: float = Field(
+        default=5.0, gt=0, description="Socket连接超时时间（秒）"
     )
-    socket_timeout: int = Field(default=5.0, gt=0, description="Socket超时时间（秒）")
+    socket_timeout: float = Field(default=5.0, gt=0, description="Socket超时时间（秒）")
 
     # 临时缓存配置
     temp_buffer_max_size: int = Field(
@@ -60,7 +60,6 @@ class PlumelogSettings(BaseSettings):
     )
 
     @computed_field
-    @property
     def redis_connection_info(self) -> RedisConnectionInfo:
         """获取Redis连接信息对象"""
         return RedisConnectionInfo(
@@ -72,7 +71,6 @@ class PlumelogSettings(BaseSettings):
         )
 
     @computed_field
-    @property
     def batch_config(self) -> BatchConfig:
         """获取批处理配置对象"""
         return BatchConfig(

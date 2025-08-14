@@ -4,7 +4,8 @@
 并异步发送到Redis。支持异步操作、批量处理和错误处理。
 """
 
-from typing import Any, Callable, Optional, TYPE_CHECKING
+import asyncio
+from typing import Any, Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from loguru import Record
@@ -24,7 +25,7 @@ class RedisSink:
     并异步发送到Redis。通过内部队列和后台任务实现解耦，避免阻塞主线程。
     """
 
-    def __init__(self, config: Optional[PlumelogSettings] = None) -> None:
+    def __init__(self, config: PlumelogSettings | None = None) -> None:
         """初始化Redis Sink
 
         Args:
@@ -35,8 +36,8 @@ class RedisSink:
         self.redis_client = AsyncRedisClient(self.config)
 
         # 异步组件相关属性
-        self._log_queue: Optional[asyncio.Queue[LogRecord]] = None
-        self._consumer_task: Optional[asyncio.Task[None]] = None
+        self._log_queue: asyncio.Queue[LogRecord] | None = None
+        self._consumer_task: asyncio.Task[None] | None = None
         self._running = False
         self._initialized = False
 
@@ -101,7 +102,11 @@ class RedisSink:
         except Exception as e:
             print(f"[RedisSink] 处理日志时发生错误: {e}")
             # 降级处理：直接打印日志
-            print(f"[RedisSink] 降级输出: {message.record['message']}")
+            try:
+                message_text = str(getattr(message, 'record', {}).get('message', message))
+                print(f"[RedisSink] 降级输出: {message_text}")
+            except Exception:
+                print(f"[RedisSink] 降级输出: {str(message)}")
 
     async def _async_handle_log(self, log_record: LogRecord) -> None:
         """异步处理日志记录
@@ -230,7 +235,13 @@ class RedisSink:
         system_info = self.field_extractor.get_system_info()
 
         # 获取时间信息
-        log_time = message.record["time"]
+        import datetime
+        record_dict = getattr(message, 'record', {})
+        log_time = record_dict.get('time')
+        
+        # 如果 log_time 为 None，使用当前时间
+        if log_time is None:
+            log_time = datetime.datetime.now()
 
         # 构建LogRecord对象
         return LogRecord(
@@ -238,8 +249,8 @@ class RedisSink:
             app_name=self.config.app_name,
             env=self.config.env,
             method=caller_info.method_name_safe,
-            content=str(message.record["message"]),
-            log_level=message.record["level"].name,
+            content=str(record_dict.get('message', '')),
+            log_level=getattr(record_dict.get('level', {}), 'name', 'INFO'),
             class_name=caller_info.class_name_safe,
             thread_name=system_info.thread_name,
             seq=self.field_extractor.get_next_seq(),
@@ -295,15 +306,15 @@ class RedisSink:
 
     async def __aexit__(
             self,
-            exc_type: Optional[type[BaseException]],
-            exc_val: Optional[BaseException],
-            exc_tb: Optional[Any]
+            exc_type: type[BaseException] | None,
+            exc_val: BaseException | None,
+            exc_tb: Any | None
     ) -> None:
         """异步上下文管理器出口"""
         await self.close()
 
 
-def create_redis_sink(config: Optional[PlumelogSettings] = None) -> Callable[[Record], None]:
+def create_redis_sink(config: PlumelogSettings | None = None) -> Callable[[Record], None]:
     """创建Redis Sink函数
 
     提供便捷的工厂函数来创建Redis Sink实例。
