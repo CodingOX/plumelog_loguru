@@ -4,7 +4,6 @@
 并异步发送到Redis。支持异步操作、批量处理和错误处理。
 """
 
-
 from typing import Any, Callable, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -179,8 +178,8 @@ class RedisSink:
                 # 批量获取，提高效率
                 batch = [log_record]
                 while (
-                    len(batch) < self.config.batch_size
-                    and not self._log_queue.empty()
+                        len(batch) < self.config.batch_size
+                        and not self._log_queue.empty()
                 ):
                     try:
                         batch.append(self._log_queue.get_nowait())
@@ -295,10 +294,10 @@ class RedisSink:
         return self
 
     async def __aexit__(
-        self,
-        exc_type: Optional[type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[Any]
+            self,
+            exc_type: Optional[type[BaseException]],
+            exc_val: Optional[BaseException],
+            exc_tb: Optional[Any]
     ) -> None:
         """异步上下文管理器出口"""
         await self.close()

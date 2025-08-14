@@ -111,7 +111,7 @@ class AsyncRedisClient:
         return self._connected and self.redis is not None
 
     async def send_log_record(
-        self, log_record: LogRecord, key: Optional[str] = None
+            self, log_record: LogRecord, key: Optional[str] = None
     ) -> bool:
         """发送单条日志记录到Redis
 
@@ -153,7 +153,7 @@ class AsyncRedisClient:
         return False
 
     async def send_log_records(
-        self, log_records: list[LogRecord], key: Optional[str] = None
+            self, log_records: list[LogRecord], key: Optional[str] = None
     ) -> bool:
         """批量发送日志记录到Redis
 
@@ -204,7 +204,7 @@ class AsyncRedisClient:
         return False
 
     async def _handle_send_error(
-        self, error: Exception, attempt: int, log_count: int
+            self, error: Exception, attempt: int, log_count: int
     ) -> None:
         """处理发送错误的通用逻辑
 
@@ -223,7 +223,7 @@ class AsyncRedisClient:
 
         if attempt < self.retry_count - 1:
             # 指数退避重试
-            delay = self.retry_delay * (2**attempt)
+            delay = self.retry_delay * (2 ** attempt)
             print(f"[Plumelog] 等待 {delay:.1f} 秒后重试...")
             await asyncio.sleep(delay)
         else:
@@ -235,10 +235,10 @@ class AsyncRedisClient:
         return self
 
     async def __aexit__(
-        self,
-        exc_type: Optional[type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[Any],
+            self,
+            exc_type: Optional[type[BaseException]],
+            exc_val: Optional[BaseException],
+            exc_tb: Optional[Any],
     ) -> None:
         """异步上下文管理器出口"""
         await self.disconnect()

@@ -4,7 +4,6 @@
 支持从环境变量读取配置，并提供合理的默认值。
 """
 
-
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -34,7 +33,7 @@ class PlumelogSettings(BaseSettings):
     redis_host: str = Field(default="localhost", description="Redis主机地址")
     redis_port: int = Field(default=6379, ge=1, le=65535, description="Redis端口")
     redis_db: int = Field(default=0, ge=0, description="Redis数据库编号")
-    redis_password: str|None = Field(default=None, description="Redis密码")
+    redis_password: str | None = Field(default=None, description="Redis密码")
     redis_key: str = Field(default="plume_log_list", description="Redis队列键名")
     max_connections: int = Field(default=5, ge=1, description="Redis最大连接数")
 
