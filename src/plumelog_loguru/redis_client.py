@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from typing import Any
 
 import redis.asyncio as redis
@@ -34,6 +35,7 @@ class AsyncRedisClient:
         self.pool: redis.ConnectionPool | None = None
         self.redis: redis.Redis | None = None
         self._connected = False
+        self._ever_connected = False
 
         # 从配置中获取重试参数
         self.retry_count = config.retry_count
@@ -45,6 +47,7 @@ class AsyncRedisClient:
         Raises:
             ConnectionError: 当无法连接到Redis时
         """
+        pid = os.getpid()
         try:
             # 创建连接池
             self.pool = redis.ConnectionPool(
@@ -65,29 +68,31 @@ class AsyncRedisClient:
             # 测试连接
             await self.redis.ping()
             self._connected = True
+            self._ever_connected = True
 
             print(
-                f"[Plumelog] Redis连接成功: {self.config.redis_host}:"
-                f"{self.config.redis_port}"
+                f"[Plumelog][PID:{pid}] Redis连接成功: "
+                f"{self.config.redis_host}:{self.config.redis_port}"
             )
 
         except Exception as e:
-            print(f"[Plumelog] Redis连接失败: {e}")
+            print(f"[Plumelog][PID:{pid}] Redis连接失败: {e}")
             self._connected = False
             await self._cleanup_on_error()
             raise ConnectionError(f"无法连接到Redis: {e}") from e
 
     async def disconnect(self) -> None:
         """断开Redis连接并清理资源"""
+        pid = os.getpid()
         try:
             if self.redis:
                 await self.redis.aclose()
             if self.pool:
                 await self.pool.aclose()
             self._connected = False
-            print("[Plumelog] Redis连接已断开")
+            print(f"[Plumelog][PID:{pid}] Redis连接已断开")
         except Exception as e:
-            print(f"[Plumelog] 断开Redis连接时发生错误: {e}")
+            print(f"[Plumelog][PID:{pid}] 断开Redis连接时发生错误: {e}")
 
     async def _cleanup_on_error(self) -> None:
         """错误时的清理操作"""
@@ -124,13 +129,19 @@ class AsyncRedisClient:
         Returns:
             发送是否成功
         """
+        pid = os.getpid()
         redis_key = key or self.config.redis_key
 
         for attempt in range(self.retry_count):
             try:
                 # 检查连接状态
                 if not self.is_connected:
-                    print("[Plumelog] Redis连接断开，尝试重新连接...")
+                    status_text = (
+                        "Redis连接断开，尝试重新连接..."
+                        if self._ever_connected
+                        else "Redis尚未建立连接，正在初始化..."
+                    )
+                    print(f"[Plumelog][PID:{pid}] {status_text}")
                     await self.connect()
 
                 assert self.redis is not None, "Redis客户端应该已连接"
@@ -169,13 +180,19 @@ class AsyncRedisClient:
         if not log_records:
             return True
 
+        pid = os.getpid()
         redis_key = key or self.config.redis_key
 
         for attempt in range(self.retry_count):
             try:
                 # 检查连接状态
                 if not self.is_connected:
-                    print("[Plumelog] Redis连接断开，尝试重新连接...")
+                    status_text = (
+                        "Redis连接断开，尝试重新连接..."
+                        if self._ever_connected
+                        else "Redis尚未建立连接，正在初始化..."
+                    )
+                    print(f"[Plumelog][PID:{pid}] {status_text}")
                     await self.connect()
 
                 assert self.redis is not None, "Redis客户端应该已连接"
@@ -215,8 +232,9 @@ class AsyncRedisClient:
             attempt: 当前尝试次数（从0开始）
             log_count: 发送的日志数量
         """
+        pid = os.getpid()
         print(
-            f"[Plumelog] Redis发送失败 (尝试 {attempt + 1}/{self.retry_count}): {error}"
+            f"[Plumelog][PID:{pid}] Redis发送失败 (尝试 {attempt + 1}/{self.retry_count}): {error}"
         )
 
         # 如果是连接错误，标记为未连接状态
@@ -226,10 +244,12 @@ class AsyncRedisClient:
         if attempt < self.retry_count - 1:
             # 指数退避重试
             delay = self.retry_delay * (2 ** attempt)
-            print(f"[Plumelog] 等待 {delay:.1f} 秒后重试...")
+            print(f"[Plumelog][PID:{pid}] 等待 {delay:.1f} 秒后重试...")
             await asyncio.sleep(delay)
         else:
-            print(f"[Plumelog] Redis发送最终失败，丢失 {log_count} 条日志")
+            print(
+                f"[Plumelog][PID:{pid}] Redis发送最终失败，丢失 {log_count} 条日志"
+            )
 
     async def __aenter__(self) -> AsyncRedisClient:
         """异步上下文管理器入口"""
