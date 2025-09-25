@@ -133,7 +133,9 @@ def main():
         if upload_to_testpypi():
             print("\n✅ 已上传到TestPyPI!")
             print("🔗 访问: https://test.pypi.org/project/plumelog_loguru/")
-            print("📦 测试安装: pip install -i https://test.pypi.org/simple/ plumelog_loguru")
+            print(
+                "📦 测试安装: pip install -i https://test.pypi.org/simple/ plumelog_loguru"
+            )
     elif choice == "2":
         confirm = input("⚠️  确定要发布到正式PyPI吗? (y/N): ")
         if confirm.lower() == "y":

@@ -41,21 +41,17 @@ __all__ = [
     # 主要接口
     "create_redis_sink",
     "RedisSink",
-
     # 配置类
     "PlumelogSettings",
-
     # 数据模型
     "LogRecord",
     "CallerInfo",
     "SystemInfo",
     "RedisConnectionInfo",
     "BatchConfig",
-
     # 核心组件
     "AsyncRedisClient",
     "FieldExtractor",
-
     # 元数据
     "__version__",
     "__author__",

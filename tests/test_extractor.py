@@ -33,7 +33,7 @@ class TestFieldExtractor:
         assert server_name1 == server_name2
         assert extractor._server_name == server_name1
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_get_server_name_primary_method(self, mock_socket):
         """测试主要的IP获取方法"""
         # 模拟socket连接成功
@@ -46,10 +46,12 @@ class TestFieldExtractor:
 
         assert server_name == "192.168.1.100"
 
-    @patch('socket.socket')
-    @patch('socket.gethostname')
-    @patch('socket.gethostbyname')
-    def test_get_server_name_fallback(self, mock_gethostbyname, mock_gethostname, mock_socket):
+    @patch("socket.socket")
+    @patch("socket.gethostname")
+    @patch("socket.gethostbyname")
+    def test_get_server_name_fallback(
+        self, mock_gethostbyname, mock_gethostname, mock_socket
+    ):
         """测试IP获取的回退机制"""
         # 第一种方法失败
         mock_socket.side_effect = Exception("Socket error")
@@ -63,8 +65,8 @@ class TestFieldExtractor:
 
         assert server_name == "192.168.1.200"
 
-    @patch('socket.socket')
-    @patch('socket.gethostname')
+    @patch("socket.socket")
+    @patch("socket.gethostname")
     def test_get_server_name_final_fallback(self, mock_gethostname, mock_socket):
         """测试最终回退到127.0.0.1"""
         # 所有方法都失败
@@ -85,7 +87,7 @@ class TestFieldExtractor:
         assert isinstance(host_name, str)
         assert len(host_name) > 0
 
-    @patch('socket.gethostname')
+    @patch("socket.gethostname")
     def test_get_host_name_fallback(self, mock_gethostname):
         """测试主机名获取失败时的回退"""
         mock_gethostname.side_effect = Exception("Hostname error")
@@ -178,8 +180,9 @@ class TestFieldExtractor:
         extractor = FieldExtractor()
 
         # 创建带时区的datetime对象
-        dt = datetime.datetime(2024, 1, 1, 12, 30, 45, 123456,
-                             tzinfo=datetime.timezone.utc)
+        dt = datetime.datetime(
+            2024, 1, 1, 12, 30, 45, 123456, tzinfo=datetime.timezone.utc
+        )
         formatted = extractor.format_datetime(dt)
 
         # 应该转换为本地时间并格式化

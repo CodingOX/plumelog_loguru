@@ -3,6 +3,7 @@
 提供系统信息提取功能，包括服务器IP、主机名、线程名、类名、方法名等。
 使用强类型和现代Python特性，提供线程安全的序列号生成。
 """
+
 import datetime
 import inspect
 import socket

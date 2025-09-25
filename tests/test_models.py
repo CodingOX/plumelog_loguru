@@ -7,7 +7,7 @@ from plumelog_loguru.models import (
     CallerInfo,
     SystemInfo,
     RedisConnectionInfo,
-    BatchConfig
+    BatchConfig,
 )
 
 
@@ -66,10 +66,7 @@ class TestCallerInfo:
 
     def test_caller_info_with_values(self):
         """测试有值的调用者信息"""
-        caller_info = CallerInfo(
-            class_name="MyClass",
-            method_name="my_method"
-        )
+        caller_info = CallerInfo(class_name="MyClass", method_name="my_method")
 
         assert caller_info.class_name == "MyClass"
         assert caller_info.method_name == "my_method"
@@ -78,10 +75,7 @@ class TestCallerInfo:
 
     def test_caller_info_with_none_values(self):
         """测试None值的调用者信息"""
-        caller_info = CallerInfo(
-            class_name=None,
-            method_name=None
-        )
+        caller_info = CallerInfo(class_name=None, method_name=None)
 
         assert caller_info.class_name is None
         assert caller_info.method_name is None
@@ -95,9 +89,7 @@ class TestSystemInfo:
     def test_system_info(self):
         """测试系统信息创建"""
         system_info = SystemInfo(
-            server_name="192.168.1.100",
-            host_name="test-host",
-            thread_name="MainThread"
+            server_name="192.168.1.100", host_name="test-host", thread_name="MainThread"
         )
 
         assert system_info.server_name == "192.168.1.100"
@@ -111,11 +103,7 @@ class TestRedisConnectionInfo:
     def test_redis_connection_info(self):
         """测试Redis连接信息创建"""
         redis_info = RedisConnectionInfo(
-            host="localhost",
-            port=6379,
-            db=0,
-            password="secret",
-            max_connections=10
+            host="localhost", port=6379, db=0, password="secret", max_connections=10
         )
 
         assert redis_info.host == "localhost"
@@ -131,7 +119,7 @@ class TestRedisConnectionInfo:
             RedisConnectionInfo(
                 host="localhost",
                 port=70000,  # 超出端口范围
-                db=0
+                db=0,
             )  # type: ignore
 
         # 测试数据库编号验证
@@ -139,7 +127,7 @@ class TestRedisConnectionInfo:
             RedisConnectionInfo(
                 host="localhost",
                 port=6379,
-                db=-1  # 负数数据库编号
+                db=-1,  # 负数数据库编号
             )  # type: ignore
 
 
@@ -149,9 +137,7 @@ class TestBatchConfig:
     def test_batch_config(self):
         """测试批处理配置创建"""
         batch_config = BatchConfig(
-            batch_size=50,
-            batch_interval_seconds=1.5,
-            queue_max_size=5000
+            batch_size=50, batch_interval_seconds=1.5, queue_max_size=5000
         )
 
         assert batch_config.batch_size == 50
@@ -165,7 +151,7 @@ class TestBatchConfig:
             BatchConfig(
                 batch_size=0,  # 批量大小不能为0
                 batch_interval_seconds=1.0,
-                queue_max_size=1000
+                queue_max_size=1000,
             )
 
         # 测试间隔时间验证
@@ -173,5 +159,5 @@ class TestBatchConfig:
             BatchConfig(
                 batch_size=100,
                 batch_interval_seconds=0,  # 间隔时间必须大于0
-                queue_max_size=1000
+                queue_max_size=1000,
             )

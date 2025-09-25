@@ -38,7 +38,7 @@ async def custom_config_example():
         redis_port=6379,
         redis_db=0,
         batch_size=50,
-        batch_interval_seconds=1.0
+        batch_interval_seconds=1.0,
     )
 
     # 使用自定义配置
@@ -58,10 +58,7 @@ async def context_manager_example():
     """上下文管理器示例"""
     print("=== 上下文管理器示例 ===")
 
-    config = PlumelogSettings(
-        app_name="上下文示例",
-        env="测试"
-    )
+    config = PlumelogSettings(app_name="上下文示例", env="测试")
 
     # 使用异步上下文管理器
     async with RedisSink(config) as sink:

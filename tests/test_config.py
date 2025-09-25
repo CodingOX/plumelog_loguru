@@ -30,7 +30,7 @@ class TestPlumelogSettings:
             redis_host="redis.example.com",
             redis_port=6380,
             redis_password="secret123",
-            batch_size=50
+            batch_size=50,
         )
 
         assert settings.app_name == "test_app"
@@ -64,7 +64,7 @@ class TestPlumelogSettings:
             redis_port=6380,
             redis_db=2,
             redis_password="test123",
-            max_connections=10
+            max_connections=10,
         )
 
         redis_info = settings.redis_connection_info
@@ -78,9 +78,7 @@ class TestPlumelogSettings:
     def test_batch_config(self):
         """测试批处理配置属性"""
         settings = PlumelogSettings(
-            batch_size=75,
-            batch_interval_seconds=1.5,
-            queue_max_size=5000
+            batch_size=75, batch_interval_seconds=1.5, queue_max_size=5000
         )
 
         batch_config = settings.batch_config
@@ -95,7 +93,7 @@ class TestPlumelogSettings:
             redis_host="redis.example.com",
             redis_port=6379,
             redis_db=1,
-            redis_password="secret123"
+            redis_password="secret123",
         )
 
         url = settings.get_redis_url()
@@ -106,10 +104,7 @@ class TestPlumelogSettings:
     def test_get_redis_url_without_password(self):
         """测试不带密码的Redis URL生成"""
         settings = PlumelogSettings(
-            redis_host="localhost",
-            redis_port=6379,
-            redis_db=0,
-            redis_password=None
+            redis_host="localhost", redis_port=6379, redis_db=0, redis_password=None
         )
 
         url = settings.get_redis_url()
