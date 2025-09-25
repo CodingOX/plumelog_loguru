@@ -1,6 +1,6 @@
 [project]
 name = "plumelog-loguru"
-version = "0.1.0"
+version = "0.2.0"
 description = "Plumelog集成库，为Loguru提供Redis日志传输功能"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -9,7 +9,7 @@ authors = [
 ]
 keywords = ["logging", "loguru", "plumelog", "redis", "async"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 4",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
