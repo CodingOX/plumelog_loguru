@@ -155,3 +155,7 @@ Thumbs.db
 
 # Project specific
 .cunzhi-memory
+.ruff_cache
+.serena
+.spec-workflow
+.pytest_cache
