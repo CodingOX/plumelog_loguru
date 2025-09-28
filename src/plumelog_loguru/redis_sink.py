@@ -108,7 +108,9 @@ class RedisSink:
         self._closing = False
 
     async def _ensure_initialized(self) -> None:
-        """确保异步组件已初始化"""
+        """确保异步组件已初始化
+            
+        """
         if self._initialized:
             return
 
