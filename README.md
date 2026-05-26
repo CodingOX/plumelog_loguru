@@ -7,7 +7,7 @@
 - 🚀 **异步处理**: 基于 `asyncio` 的高性能异步日志传输，对业务代码无阻塞。
 - 📦 **智能批量**: 聚合日志记录，按数量或时间间隔批量发送，大幅减少网络开销。
 - 🔒 **类型安全**: 完整的 Python 3.10+ 类型提示，享受现代 IDE 的智能提示与静态检查。
-- 🔄 **智能重试**: 内置指数退避重试机制，确保在网络抖动时日志不丢失。
+- 🔄 **智能重试**: 内置指数退避重试机制；重试耗尽后会显式记录丢弃数量，避免关闭流程无限阻塞。
 - 🏊 **连接池**: 高效管理 Redis 连接，提升高并发场景下的性能和稳定性。
 - ⚙️ **灵活配置**: 基于 Pydantic 的配置模型，支持环境变量，易于在不同环境中部署。
 - 🧵 **线程安全**: 专为多线程环境设计，保证在复杂应用中安全运行。
@@ -110,7 +110,11 @@ asyncio.run(main())
 | `batch_interval_seconds` | `PLUMELOG_BATCH_INTERVAL_SECONDS` | `2.0` | 触发批量发送的时间间隔（秒） |
 | `queue_max_size` | `PLUMELOG_QUEUE_MAX_SIZE` | `10000` | 内存中转队列的最大容量 |
 | `retry_count` | `PLUMELOG_RETRY_COUNT` | `3` | Redis 操作失败时的最大重试次数 |
-| `max_connections` | `PLUMELOG_MAX_CONNECTIONS` | `10` | Redis 连接池的最大连接数 |
+| `retry_delay` | `PLUMELOG_RETRY_DELAY` | `2.0` | 首次重试延迟，后续按指数退避 |
+| `socket_connect_timeout` | `PLUMELOG_SOCKET_CONNECT_TIMEOUT` | `5.0` | Redis 连接建立超时 |
+| `socket_timeout` | `PLUMELOG_SOCKET_TIMEOUT` | `5.0` | Redis 命令读写超时 |
+| `temp_buffer_max_size` | `PLUMELOG_TEMP_BUFFER_MAX_SIZE` | `1000` | 临时缓存最大容量 |
+| `max_connections` | `PLUMELOG_MAX_CONNECTIONS` | `5` | Redis 连接池的最大连接数 |
 
 <br>
 
@@ -126,7 +130,7 @@ asyncio.run(main())
 -   **专用异步运行时**: `RedisSink` 启动独立守护线程托管 `asyncio` 事件循环，确保多线程环境也能安全入队。
 -   **非阻塞 I/O**: 所有网络操作（Redis 通信）均基于 `asyncio`，不会阻塞主业务线程。
 -   **批处理优化**: 聚合多条日志为单次网络请求，显著降低 I/O 压力和 Redis `OPS`。
--   **优雅降级**: 内置完善的重试、线程安全临时缓存与容错机制，在外部依赖（如 Redis）不稳时，最大程度保证系统稳定和数据不丢失。
+-   **优雅降级**: 内置有限重试、线程安全临时缓存与容错机制；当 Redis 长时间不可用时，会显式记录被丢弃的日志数量，避免消费者和关闭流程无限重试。
 
 ### 系统整体架构
 
@@ -153,8 +157,8 @@ sequenceDiagram
 ```
 
 **处理流程解读**:
-1.  **同步调用**: 你的业务代码调用 `logger.info()`。这是一个**几乎零成本**的操作，因为 `RedisSink` 仅需将日志记录放入内存队列。
-2.  **异步入队**: 日志记录被线程安全地投递到专用事件循环中的 `asyncio.Queue`。提交过程使用 `asyncio.run_coroutine_threadsafe`，主线程几乎瞬时返回。
+1.  **同步调用**: 你的业务代码调用 `logger.info()`。`RedisSink` 会先做日志转换，再将发送任务交给专用事件循环处理。
+2.  **异步入队**: 日志记录被线程安全地投递到专用事件循环中的 `asyncio.Queue`。提交过程使用 `asyncio.run_coroutine_threadsafe`；当后台积压超过上限时，会退回到有界临时缓存并打印告警。
 3.  **后台处理 (未在图中编号)**: 专用线程中的后台任务（Consumer Task）持续监控队列。
 4.  **批量发送**: 当队列中的日志达到一定数量（`batch_size`）或经过一定时间（`batch_interval_seconds`），后台任务会将它们打包。
 5.  **持久化存储**: 打包后的日志通过 `AsyncRedisClient` 使用连接池中的连接，以 `LPUSH` 命令高效地一次性写入 Redis。如果发生网络错误，将触发**智能重试**。
@@ -193,14 +197,14 @@ sequenceDiagram
 ```
 ### 专用事件循环线程
 
-`RedisSink` 在实例化时会启动一个守护线程，在线程内初始化并运行独立的 `asyncio` 事件循环。所有日志转换、入队和 Redis 发送任务都会调度到该事件循环执行：
+`RedisSink` 会在首次使用时启动一个守护线程，在线程内初始化并运行独立的 `asyncio` 事件循环。所有日志转换、入队和 Redis 发送任务都会调度到该事件循环执行：
 
 -   调用线程无需管理事件循环，适配同步、多线程和异步混合场景。
 -   通过 `asyncio.run_coroutine_threadsafe` 完成线程间调度，确保提交动作具备跨线程的可见性和可靠性。
--   若事件循环初始化前产生日志，线程安全的 `deque` 临时缓存会接管，待 Loop 准备就绪后统一回放。
+-   若后台提交积压超过上限，线程安全的 `deque` 临时缓存会接管，并保留最近的一批日志等待关闭阶段尽力发送。
 
 **关键优势**:
--   **主线程保护**: 专用事件循环线程承担全部异步工作，无论 Redis 的网络状况如何或日志量多大，`logger.info()` 的调用耗时始终稳定在微秒级别，**完全不影响业务响应速度**。
+-   **主线程保护**: 专用事件循环线程承担主要异步工作。正常情况下 `logger.info()` 只做本地转换和后台投递；当后台积压超过上限时会进入有界临时缓存并打印告警，而不是继续无界堆积任务。
 -   **资源效率**: 批量发送大大减少了网络往返次数和系统调用，降低了 CPU 和网络资源的消耗。连接池避免了频繁创建和销毁连接的开销。
 -   **数据可靠性**: 内存队列配合线程安全的临时缓存 `deque` 作为双层缓冲，指数退避重试机制在网络抖动时通过逐渐增加等待时间来恢复，大大提高了日志发送的成功率。
 
@@ -229,30 +233,29 @@ classDiagram
         +str server_name
         +str method
         +str content
-        +str level
+        +str log_level
         +str class_name
         +str thread_name
-        +int seq_id
+        +int seq
         +str date_time
-        +int unix_time
+        +int dt_time
         +to_dict()
     }
 
     class FieldExtractor {
-        +get_server_ip() str
-        +get_hostname() str
+        +get_server_name() str
+        +get_host_name() str
         +get_thread_name() str
-        +get_class_method() (str,str)
-        +next_seq_id() int
+        +get_caller_info(depth) CallerInfo
+        +get_next_seq() int
         -_seq_counter
     }
 
     class AsyncRedisClient {
         +connect()
-        +send_batch(records: list[LogRecord]) bool
-        +close()
-        +health_check() bool
-        -_retry_with_backoff(fn)
+        +send_log_record(record: LogRecord) bool
+        +send_log_records(records: list[LogRecord]) bool
+        +disconnect()
         -_pool
     }
 
@@ -267,9 +270,8 @@ classDiagram
     class RedisSink {
         +__call__(record)
         +close()
-        +flush()
-        -_ensure_async_init()
-        -_consumer_loop()
+        -_ensure_initialized()
+        -_log_consumer()
         -_queue: AsyncQueue
         -_client: AsyncRedisClient
         -_extractor: FieldExtractor
@@ -299,10 +301,10 @@ classDiagram
     2.  启动**指数退避重试**机制（例如，等待 1s, 2s, 4s... 后重试）。
     3.  在此期间，新的日志继续进入内存队列进行缓冲。
     4.  如果 Redis 在重试期间恢复，积压的日志将被发送。
-    5.  如果达到最大重试次数后依然失败，该批次日志将被丢弃，并记录一条错误日志到标准输出，防止无限重试耗尽资源。
+    5.  如果达到最大重试次数后依然失败，该批次日志将被丢弃，并记录丢弃数量到标准输出，防止无限重试耗尽资源。
 -   **内存队列满**:
-    -   如果日志生产速度持续高于消费速度（例如 Redis 长时间不可用），队列可能会满。
-    -   `put_nowait()` 会抛出 `asyncio.QueueFull` 异常，`RedisSink` 会捕获它，静默丢弃当前日志并打印一条警告。这是一种**背压（Backpressure）**机制，用于保护应用内存，防止因日志问题导致主业务崩溃。
+    -   如果日志生产速度持续高于消费速度（例如 Redis 长时间不可用），后台提交任务会先达到上限。
+    -   达到上限后，`RedisSink` 会把新日志转入有界临时缓存，并打印一条警告；临时缓存也满时会淘汰最旧日志。这是一种**有界背压（Backpressure）**机制，用于保护应用内存，防止任务无界堆积。
 
 ---
 
