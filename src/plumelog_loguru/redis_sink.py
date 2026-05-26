@@ -130,7 +130,9 @@ class RedisSink:
         """
         now = time.monotonic()
         self._warn_counters[category] = self._warn_counters.get(category, 0) + 1
-        last = self._warn_last_time.get(category, 0.0)
+        # 默认使用 -inf 而非 0.0，确保首次调用时 now - (-inf) = +inf >= interval，
+        # 不受 time.monotonic() 绝对值影响（CI 容器启动时间可能 < _warn_interval）
+        last = self._warn_last_time.get(category, float("-inf"))
         if now - last >= self._warn_interval:
             count = self._warn_counters[category]
             suffix = f" (累计 {count} 次)" if count > 1 else ""
