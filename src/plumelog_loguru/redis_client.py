@@ -201,17 +201,18 @@ class AsyncRedisClient:
                 if len(log_records) == 1:
                     return await self.send_log_record(log_records[0], key)
 
-                # 批量发送日志
-                async with self.redis.pipeline() as pipe:
-                    for log_record in log_records:
-                        log_json = json.dumps(
-                            log_record.to_dict(),
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                        )
-                        pipe.lpush(redis_key, log_json)
-
-                    await pipe.execute()
+                # 批量发送：先序列化所有日志为 JSON
+                log_jsons = [
+                    json.dumps(
+                        log_record.to_dict(),
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                    for log_record in log_records
+                ]
+                # 单条 lpush 命令推入所有数据，消除 pipeline N+1 问题：
+                # 原实现逐条 lpush 仍需 Redis 解析 N 条命令，此处合并为 1 条。
+                await self.redis.lpush(redis_key, *log_jsons)  # type: ignore[misc]
 
                 return True
 
