@@ -85,7 +85,10 @@ def run_benchmark(num_threads=4, logs_per_thread=25000):
         t.join()
         
     # 5. 等待队列排空并优雅关闭
-    sink.close()
+    # 因为 close 是 async 函数，我们把它抛给后台事件循环去执行并等待
+    import asyncio
+    loop = sink._ensure_runtime()._loop
+    asyncio.run_coroutine_threadsafe(sink.close(), loop).result()
     
     end_time = time.time()
     stop_event.set()
