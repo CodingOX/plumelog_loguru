@@ -108,3 +108,34 @@ jobs:
       # Trusted Publishing：uv 自动获取 OIDC token，无需手动配置 PyPI token
       - name: Publish to PyPI
         run: uv publish
+
+  # ────────────────────────────────────────────
+  # Job 4: 创建 GitHub Release 并上传构建产物
+  # 依赖 publish 成功才运行（确保 PyPI 已发布再归档）
+  # ────────────────────────────────────────────
+  github-release:
+    name: Create GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+
+    # 需要 contents:write 权限才能创建 Release
+    permissions:
+      contents: write
+
+    steps:
+      # 下载 build job 产生的 wheel + sdist
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      # 自动以当前 tag 创建 GitHub Release
+      # generate_release_notes: true 会自动生成 PR/commit 变更日志
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true   # 自动从 PR/commit 生成 changelog
+          # 若 tag 是预发布格式（如 v1.0.0-beta），自动标记为 prerelease
+          prerelease: ${{ contains(github.ref_name, '-') }}
