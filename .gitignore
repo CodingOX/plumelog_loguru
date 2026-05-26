@@ -159,3 +159,4 @@ Thumbs.db
 .serena
 .spec-workflow
 .pytest_cache
+.ace-tool/
