@@ -1,6 +1,5 @@
 """测试数据模型模块"""
 
-
 import pytest
 
 from plumelog_loguru.models import (

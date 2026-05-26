@@ -47,10 +47,17 @@ async def test_send_log_records_uses_single_lpush_command(
 
     def _make_record(content: str) -> LogRecord:
         return LogRecord(
-            server_name="s", app_name="a", env="test",
-            method="m", content=content, log_level="INFO",
-            class_name="C", thread_name="T",
-            seq=1, date_time="2024-01-01 00:00:00.000", dt_time=0,
+            server_name="s",
+            app_name="a",
+            env="test",
+            method="m",
+            content=content,
+            log_level="INFO",
+            class_name="C",
+            thread_name="T",
+            seq=1,
+            date_time="2024-01-01 00:00:00.000",
+            dt_time=0,
         )
 
     client = AsyncRedisClient(test_config)

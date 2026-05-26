@@ -8,8 +8,8 @@ import asyncio
 import atexit
 import datetime
 import sys
-import time
 import threading
+import time
 from collections import deque
 from collections.abc import Callable, Coroutine
 from concurrent.futures import Future
@@ -32,6 +32,7 @@ class LogSink(Protocol):
     def __call__(self, message: Record) -> None:
         """处理日志消息"""
         ...
+
 
 T = TypeVar("T")
 
@@ -273,9 +274,9 @@ class RedisSink:
 
         if exception:
             # 后台异常不应该悄无声息，需要打印以便排查
-            self._rate_limited_warn(
-                "future_exception",
+            print(
                 f"[RedisSink] 后台处理日志抛出异常: {exception}",
+                file=sys.stderr,
             )
 
     async def _flush_temp_buffer_to_redis(self) -> None:
@@ -287,11 +288,18 @@ class RedisSink:
         if not buffered_logs:
             return
 
-        print(f"[RedisSink] 发送剩余的 {len(buffered_logs)} 条临时缓存日志...", file=sys.stderr)
+        n = len(buffered_logs)
+        print(
+            f"[RedisSink] 发送剩余的 {n} 条临时缓存日志...",
+            file=sys.stderr,
+        )
         # 关闭阶段只做最后一次尽力投递；失败时必须显式暴露丢弃数量。
         success = await self.redis_client.send_log_records(buffered_logs)
         if not success:
-            print(f"[RedisSink] 临时缓存发送失败，丢弃 {len(buffered_logs)} 条日志", file=sys.stderr)
+            print(
+                f"[RedisSink] 临时缓存发送失败，丢弃 {n} 条日志",
+                file=sys.stderr,
+            )
 
     async def _async_handle_log(self, log_record: LogRecord) -> None:
         """异步处理日志记录
@@ -363,7 +371,10 @@ class RedisSink:
                 break
 
         if transferred_count > 0:
-            print(f"[RedisSink] 已将 {transferred_count} 条临时缓存日志转移到正式队列", file=sys.stderr)
+            print(
+                f"[RedisSink] 已将 {transferred_count} 条临时缓存日志转移到正式队列",
+                file=sys.stderr,
+            )
 
     async def _log_consumer(self) -> None:
         """后台消费者任务，持续从队列中获取日志并发送到Redis"""
@@ -476,7 +487,10 @@ class RedisSink:
             try:
                 await asyncio.wait_for(self._log_queue.join(), timeout=10.0)
             except asyncio.TimeoutError:
-                print("[RedisSink] 等待队列清空超时，将继续关闭并清理剩余日志", file=sys.stderr)
+                print(
+                    "[RedisSink] 等待队列清空超时，将继续关闭并清理剩余日志",
+                    file=sys.stderr,
+                )
 
         if self._consumer_task and not self._consumer_task.done():
             try:
@@ -501,7 +515,11 @@ class RedisSink:
                     break
 
             if remaining_logs:
-                print(f"[RedisSink] 发送剩余的 {len(remaining_logs)} 条队列日志...", file=sys.stderr)
+                n = len(remaining_logs)
+                print(
+                    f"[RedisSink] 发送剩余的 {n} 条队列日志...",
+                    file=sys.stderr,
+                )
                 success = await self.redis_client.send_log_records(remaining_logs)
                 if not success:
                     print(

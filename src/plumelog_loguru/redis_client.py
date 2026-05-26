@@ -128,8 +128,9 @@ class AsyncRedisClient:
                     pass
             print(f"[Plumelog][PID:{pid}] Redis连接已断开", file=sys.stderr)
         except Exception as e:
+            sanitized = self._sanitize_error(e)
             print(
-                f"[Plumelog][PID:{pid}] 断开Redis连接时发生错误: {self._sanitize_error(e)}",
+                f"[Plumelog][PID:{pid}] 断开Redis连接时发生错误: {sanitized}",
                 file=sys.stderr,
             )
         finally:
@@ -292,7 +293,10 @@ class AsyncRedisClient:
         if attempt < self.retry_count - 1:
             # 指数退避重试
             delay = self.retry_delay * (2**attempt)
-            print(f"[Plumelog][PID:{pid}] 等待 {delay:.1f} 秒后重试...", file=sys.stderr)
+            print(
+                f"[Plumelog][PID:{pid}] 等待 {delay:.1f} 秒后重试...",
+                file=sys.stderr,
+            )
             await asyncio.sleep(delay)
         else:
             print(

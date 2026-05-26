@@ -8,11 +8,7 @@
 5. disconnect() 资源清理加固
 """
 
-import asyncio
-import sys
-import time
 from io import StringIO
-from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -51,9 +47,7 @@ class TestDequeSimplification:
 
     def test_deque_overflow_drops_exactly_one(self) -> None:
         """缓存满时新增 1 条应恰好丢弃 1 条（最旧的），不会双重丢弃"""
-        config = PlumelogSettings(
-            app_name="test", env="test", temp_buffer_max_size=3
-        )
+        config = PlumelogSettings(app_name="test", env="test", temp_buffer_max_size=3)
         sink = RedisSink(config)
 
         # 填满缓存
@@ -69,9 +63,7 @@ class TestDequeSimplification:
 
     def test_deque_not_full_no_drop(self) -> None:
         """未满时不应丢弃任何日志"""
-        config = PlumelogSettings(
-            app_name="test", env="test", temp_buffer_max_size=10
-        )
+        config = PlumelogSettings(app_name="test", env="test", temp_buffer_max_size=10)
         sink = RedisSink(config)
 
         sink._store_to_temp_buffer(_make_record("a"))
