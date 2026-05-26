@@ -4,7 +4,6 @@ plumelog 发布脚本
 用于自动化构建和发布流程
 """
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -97,7 +96,7 @@ def upload_to_pypi() -> bool:
     return run_command("uv run twine upload dist/*", "上传到PyPI")
 
 
-def main():
+def main() -> None:
     """主函数"""
     print("🎯 plumelog 发布脚本")
     print("=" * 50)
@@ -134,7 +133,8 @@ def main():
             print("\n✅ 已上传到TestPyPI!")
             print("🔗 访问: https://test.pypi.org/project/plumelog_loguru/")
             print(
-                "📦 测试安装: pip install -i https://test.pypi.org/simple/ plumelog_loguru"
+                "📦 测试安装: pip install -i "
+                "https://test.pypi.org/simple/ plumelog_loguru"
             )
     elif choice == "2":
         confirm = input("⚠️  确定要发布到正式PyPI吗? (y/N): ")

@@ -29,13 +29,13 @@
 
 from .config import PlumelogSettings
 from .extractor import FieldExtractor
-from .models import LogRecord, CallerInfo, SystemInfo, RedisConnectionInfo, BatchConfig
+from .models import BatchConfig, CallerInfo, LogRecord, RedisConnectionInfo, SystemInfo
 from .redis_client import AsyncRedisClient
 from .redis_sink import RedisSink, create_redis_sink
 
-__version__ = "0.1.0"
-__author__ = "Your Name"
-__email__ = "your.email@example.com"
+__version__ = "0.2.0"
+__author__ = "Alistar Max"
+__email__ = "codingox@gmail.com"
 
 __all__ = [
     # 主要接口

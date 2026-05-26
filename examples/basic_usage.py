@@ -4,11 +4,13 @@
 """
 
 import asyncio
+
 from loguru import logger
-from plumelog_loguru import create_redis_sink, PlumelogSettings, RedisSink
+
+from plumelog_loguru import PlumelogSettings, RedisSink, create_redis_sink
 
 
-async def basic_example():
+async def basic_example() -> None:
     """基本使用示例"""
     print("=== 基本使用示例 ===")
 
@@ -26,7 +28,7 @@ async def basic_example():
     print("基本示例完成\n")
 
 
-async def custom_config_example():
+async def custom_config_example() -> None:
     """自定义配置示例"""
     print("=== 自定义配置示例 ===")
 
@@ -54,7 +56,7 @@ async def custom_config_example():
     print("自定义配置示例完成\n")
 
 
-async def context_manager_example():
+async def context_manager_example() -> None:
     """上下文管理器示例"""
     print("=== 上下文管理器示例 ===")
 
@@ -72,15 +74,15 @@ async def context_manager_example():
     print("上下文管理器示例完成（资源已自动清理）\n")
 
 
-def class_method_example():
+def class_method_example() -> None:
     """类方法调用示例"""
     print("=== 类方法调用示例 ===")
 
     class ExampleService:
-        def __init__(self):
+        def __init__(self) -> None:
             self.name = "示例服务"
 
-        def process_data(self, data: str):
+        def process_data(self, data: str) -> bool:
             """处理数据的方法"""
             logger.info(f"开始处理数据: {data}")
 
@@ -92,11 +94,11 @@ def class_method_example():
             logger.success(f"数据处理成功: {data}")
             return True
 
-        def handle_error(self):
+        def handle_error(self) -> bool:
             """错误处理示例"""
             try:
                 # 模拟一个错误
-                result = 1 / 0
+                raise ZeroDivisionError("模拟错误")
             except ZeroDivisionError as e:
                 logger.exception(f"发生除零错误: {e}")
                 return False
@@ -110,7 +112,7 @@ def class_method_example():
     print("类方法调用示例完成\n")
 
 
-async def main():
+async def main() -> None:
     """主函数：运行所有示例"""
     print("🚀 Plumelog-Loguru 使用示例\n")
 
