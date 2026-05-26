@@ -185,6 +185,9 @@ class RedisSink:
 
             future.add_done_callback(_on_done)
         except Exception as exc:  # noqa: BLE001
+            # 关键：acquire 已成功但 submit 失败时必须归还许可。
+            # 若不 release，许可会持续流失，最终导致所有日志退化到 temp_buffer（系统假死）。
+            self._pending_submit_semaphore.release()
             print(f"[RedisSink] 提交日志处理任务失败: {exc}")
             self._store_to_temp_buffer(log_record)
 

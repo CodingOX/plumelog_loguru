@@ -220,3 +220,45 @@ def test_redis_sink_uses_loguru_record_caller_fields(
     assert record.method == "handler"
     assert record.class_name == "app.service"
     asyncio.run(sink.close())
+
+
+def test_semaphore_released_when_submit_raises(
+    monkeypatch: MonkeyPatch, test_config: PlumelogSettings
+) -> None:
+    """submit() 抛异常时信号量许可不能流失
+
+    复现路径：acquire 成功 → submit 抛 RuntimeError → except 块未 release。
+    累积后信号量耗尽，所有日志退化到 temp_buffer。
+    """
+    monkeypatch.setattr(
+        "plumelog_loguru.redis_sink.AsyncRedisClient", DummyAsyncRedisClient
+    )
+    sink = RedisSink(test_config)
+
+    # 让 submit() 必定抛异常
+    def fake_submit(coro: Any) -> None:
+        coro.close()  # 防止 "coroutine never awaited" 警告
+        raise RuntimeError("事件循环已停止")
+
+    runtime = sink._ensure_runtime()
+    monkeypatch.setattr(runtime, "submit", fake_submit)
+
+    permits_before = sink._pending_submit_limit
+
+    # 触发一次：acquire 成功 → submit 失败 → 进入 except
+    sink(_build_message("trigger-submit-fail"))  # type: ignore[arg-type]
+
+    # 清点 semaphore 可用许可数（BoundedSemaphore 无直接 _value 访问，用 acquire 轮询）
+    available = 0
+    while sink._pending_submit_semaphore.acquire(blocking=False):
+        available += 1
+    for _ in range(available):
+        sink._pending_submit_semaphore.release()
+
+    assert available == permits_before, (
+        f"semaphore 许可流失！期望 {permits_before}，实际 {available}"
+    )
+
+    # 恢复 submit，让 close() 能正常关闭事件循环
+    monkeypatch.undo()
+    asyncio.run(sink.close())
