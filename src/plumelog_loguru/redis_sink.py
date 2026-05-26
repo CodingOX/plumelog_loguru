@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import atexit
 import datetime
 import threading
 from collections import deque
@@ -110,6 +111,8 @@ class RedisSink:
         self._pending_submit_semaphore = threading.BoundedSemaphore(
             self._pending_submit_limit
         )
+        # 仅首次真正使用时才注册 atexit 兜底，避免构造即注册
+        self._atexit_registered = False
 
     def _ensure_runtime(self) -> _AsyncRuntime:
         """按需启动专用事件循环，避免未使用的 sink 占用线程。"""
@@ -171,6 +174,12 @@ class RedisSink:
             self._store_to_temp_buffer(log_record)
             return
 
+        # 首次真正使用时注册 atexit 兜底：进程正常退出时尽力 flush 剩余日志。
+        # 延迟注册是为了避免仅构造 sink 而不使用时也占用 atexit 槽位。
+        if not self._atexit_registered:
+            self._atexit_registered = True
+            atexit.register(self._sync_close_on_exit)
+
         try:
             if not self._pending_submit_semaphore.acquire(blocking=False):
                 print("[RedisSink] 后台任务积压过高，日志写入临时缓存")
@@ -190,6 +199,27 @@ class RedisSink:
             self._pending_submit_semaphore.release()
             print(f"[RedisSink] 提交日志处理任务失败: {exc}")
             self._store_to_temp_buffer(log_record)
+
+    def _sync_close_on_exit(self) -> None:
+        """进程退出时的同步兜底清理（atexit 回调，非 async）
+
+        此方法只在进程正常退出且用户未手动调用 close() 时有效。
+        向已有后台事件循环投递关闭协程并同步等待完成，尽力 flush 剩余日志。
+        """
+        if self._closing:
+            return  # 已手动关闭，跳过
+        try:
+            if self._runtime and not self._runtime._stopped:
+                # 向已有的后台事件循环投递关闭协程并等待（最多等 5 秒）
+                future = asyncio.run_coroutine_threadsafe(
+                    self._async_close(), self._runtime.loop
+                )
+                future.result(timeout=5.0)
+        except Exception as e:
+            print(f"[RedisSink] atexit 清理失败: {e}")
+        finally:
+            if self._runtime and not self._runtime._stopped:
+                self._runtime.stop()
 
     async def _run_in_runtime(self, coro: Coroutine[Any, Any, T]) -> T:
         """在线程事件循环中执行协程并返回结果"""

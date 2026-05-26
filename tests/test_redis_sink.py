@@ -305,3 +305,37 @@ def test_get_caller_info_not_called_when_loguru_provides_fields(
     assert record.method == "my_func"
     assert record.class_name == "my_module"
     asyncio.run(sink.close())
+
+
+def test_atexit_handler_registered_on_first_use(
+    monkeypatch: MonkeyPatch, test_config: PlumelogSettings
+) -> None:
+    """第一次调用 sink 后应注册 atexit 兜底清理，且不重复注册
+
+    进程正常退出时若未手动 close()，atexit 回调会尽力 flush 剩余日志。
+    """
+    import atexit
+
+    monkeypatch.setattr(
+        "plumelog_loguru.redis_sink.AsyncRedisClient", DummyAsyncRedisClient
+    )
+    registered_funcs: list = []
+    original_register = atexit.register
+
+    def fake_register(func: Any, *args: Any, **kwargs: Any) -> Any:
+        registered_funcs.append(func)
+        return original_register(func, *args, **kwargs)
+
+    monkeypatch.setattr("plumelog_loguru.redis_sink.atexit.register", fake_register)
+
+    sink = RedisSink(test_config)
+    assert len(registered_funcs) == 0, "构造时不应注册 atexit"
+
+    sink(_build_message("hello"))  # type: ignore[arg-type]
+    assert len(registered_funcs) == 1, "首次使用后应注册 atexit"
+
+    # 第二次调用不应重复注册
+    sink(_build_message("hello2"))  # type: ignore[arg-type]
+    assert len(registered_funcs) == 1, "不应重复注册 atexit"
+
+    asyncio.run(sink.close())
