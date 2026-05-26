@@ -9,8 +9,10 @@ uv sync --dev              # 安装开发依赖
 uv run pytest              # 运行全部测试
 uv run pytest tests/test_config.py -v   # 运行单个测试文件
 uv run pytest -k "test_name" -v         # 按名称筛选测试
-uv run format              # 代码格式化（实际命令需查看 scripts）
-uv run lint                # 类型检查（实际命令需查看 scripts）
+uv run ruff format .       # 代码格式化（替代 black + isort）
+uv run ruff check --fix .  # 自动修复可修复的 lint 问题
+uv run ruff check .        # 仅检查，不修改文件（CI 同款）
+uv run mypy src/           # 类型检查
 uv run python -m build     # 构建 wheel
 uv run twine check dist/*  # 检查构建产物
 ```
