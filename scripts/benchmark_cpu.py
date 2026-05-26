@@ -149,13 +149,20 @@ def run_benchmark(num_threads=4, logs_per_thread=25000):
     print(f"💾  内存 平均:       {avg_mem:.1f} MB")
     print("-" * 50)
     print(f"📌 真实场景估算 (按 {typical_qps} QPS 折算):")
+    print(
+        f"   算法: ({typical_qps} / {qps:.0f} QPS) × {avg_cpu_pct_of_system:.1f}% 全机算力"
+    )
     print(f"   占单核 CPU:      {(typical_qps / qps) * avg_cpu:.2f}%")
     print(f"   占全机总算力:    {estimated_cpu_at_typical:.3f}%  ← 几乎可以忽略不计")
+    print("   (基于线性比例假设：QPS 越低，CPU 开销等比例缩小)")
     print("=" * 50)
     print("💡 结论参考：")
     print("1. Python 单核最高 CPU 为 100%。如果平均 CPU 在 30% 以下，说明极轻量。")
     print("2. 超过 100% 说明利用了多核（主业务线程占核心，日志后台线程占核心）。")
     print("3. '占全机总算力' 才是真实的系统影响指标，数值越低说明对业务侵占越小。")
+    print(
+        f"4. 极限压测使用了 {num_threads} 个线程同时疯狂写入，实际业务日志量远低于此。"
+    )
 
 
 if __name__ == "__main__":
