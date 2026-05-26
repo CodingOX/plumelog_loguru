@@ -262,3 +262,46 @@ def test_semaphore_released_when_submit_raises(
     # 恢复 submit，让 close() 能正常关闭事件循环
     monkeypatch.undo()
     asyncio.run(sink.close())
+
+
+def test_get_caller_info_not_called_when_loguru_provides_fields(
+    monkeypatch: MonkeyPatch, test_config: PlumelogSettings
+) -> None:
+    """当 Loguru record 已含 function/name 时，不应调用 get_caller_info
+
+    原实现无条件调用 inspect.currentframe()，即使 Loguru 已提供完整字段也不例外。
+    修复后应走快速路径：有字段时跳过 inspect，降低热路径 CPU 开销。
+    """
+    monkeypatch.setattr(
+        "plumelog_loguru.redis_sink.AsyncRedisClient", DummyAsyncRedisClient
+    )
+    sink = RedisSink(test_config)
+
+    caller_info_call_count = 0
+    original_get_caller_info = sink.field_extractor.get_caller_info
+
+    def patched_get_caller_info(depth: int = 2) -> Any:
+        nonlocal caller_info_call_count
+        caller_info_call_count += 1
+        return original_get_caller_info(depth=depth)
+
+    monkeypatch.setattr(sink.field_extractor, "get_caller_info", patched_get_caller_info)
+
+    # Loguru 已提供 function 和 name，不应触发 inspect
+    message = SimpleNamespace(
+        record={
+            "message": "test",
+            "level": SimpleNamespace(name="INFO"),
+            "time": datetime.datetime.now(),
+            "function": "my_func",
+            "name": "my_module",
+        }
+    )
+    record = sink._convert_to_log_record(message)  # type: ignore[arg-type]
+
+    assert caller_info_call_count == 0, (
+        "Loguru 已提供 function/name 字段时，不应调用 get_caller_info"
+    )
+    assert record.method == "my_func"
+    assert record.class_name == "my_module"
+    asyncio.run(sink.close())

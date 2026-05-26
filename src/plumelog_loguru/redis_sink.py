@@ -338,11 +338,22 @@ class RedisSink:
             LogRecord对象
         """
         record_dict = getattr(message, "record", {})
-        caller_info = self.field_extractor.get_caller_info(depth=3)
 
-        # 优先复用 Loguru 已经解析好的调用者字段，避免热路径重复 inspect。
-        method = str(record_dict.get("function") or caller_info.method_name_safe)
-        class_name = str(record_dict.get("name") or caller_info.class_name_safe)
+        # 优先使用 Loguru 已解析的调用者字段，避免热路径重复 inspect。
+        # 快速路径：两个字段都存在时，完全跳过 inspect.currentframe() 调用。
+        # 慢速路径：仅当 Loguru 未提供字段时，才回退到 get_caller_info()（惰性求值）。
+        raw_function = record_dict.get("function")
+        raw_name = record_dict.get("name")
+
+        if raw_function and raw_name:
+            # 快速路径：Loguru 已提供完整调用者信息，无需 inspect
+            method = str(raw_function)
+            class_name = str(raw_name)
+        else:
+            # 慢速路径：Loguru 字段缺失，回退到 inspect.currentframe() 栈解析
+            caller_info = self.field_extractor.get_caller_info(depth=3)
+            method = str(raw_function or caller_info.method_name_safe)
+            class_name = str(raw_name or caller_info.class_name_safe)
 
         # 获取系统信息
         system_info = self.field_extractor.get_system_info()
