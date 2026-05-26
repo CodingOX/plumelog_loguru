@@ -1,8 +1,7 @@
-import time
-import threading
 import os
 import sys
-import gc
+import threading
+import time
 from unittest.mock import AsyncMock
 
 try:
@@ -13,10 +12,12 @@ except ImportError:
     sys.exit(1)
 
 from loguru import logger
+
 from plumelog_loguru import PlumelogSettings, RedisSink
 
 # 🚀 补丁：Mock 掉 Redis 的网络发送过程，模拟一个零延迟的 Redis
-# 这样我们可以纯粹地测试 plumelog-loguru 在 Python 侧的 CPU 开销（队列、线程、JSON序列化等）
+# 这样我们可以纯粹地测试 plumelog-loguru 在 Python 侧的 CPU 开销
+# （队列、线程、JSON序列化等）
 from plumelog_loguru.redis_client import AsyncRedisClient
 
 AsyncRedisClient.send_log_records = AsyncMock(return_value=True)
@@ -43,7 +44,8 @@ def worker_sync(num_logs, thread_id):
     """模拟业务线程狂刷日志"""
     for i in range(num_logs):
         logger.info(
-            f"[{thread_id}] 模拟业务请求订单号: ORD{i:08d} 发生状态流转，当前状态为: PROCESSING"
+            f"[{thread_id}] 模拟业务请求订单号: ORD{i:08d} "
+            "发生状态流转，当前状态为: PROCESSING"
         )
 
 
@@ -143,14 +145,16 @@ def run_benchmark(num_threads=4, logs_per_thread=25000):
         f"🖥️  CPU 峰值:        {max_cpu:.1f}%  = 占全机算力 {max_cpu_pct_of_system:.1f}%"
     )
     print(
-        f"🖥️  CPU 平均:        {avg_cpu:.1f}%  = 占全机算力 {avg_cpu_pct_of_system:.1f}%  <-- 重点关注"
+        f"🖥️  CPU 平均:        {avg_cpu:.1f}%  "
+        f"= 占全机算力 {avg_cpu_pct_of_system:.1f}%  <-- 重点关注"
     )
     print(f"💾  内存 峰值:       {max_mem:.1f} MB")
     print(f"💾  内存 平均:       {avg_mem:.1f} MB")
     print("-" * 50)
     print(f"📌 真实场景估算 (按 {typical_qps} QPS 折算):")
     print(
-        f"   算法: ({typical_qps} / {qps:.0f} QPS) × {avg_cpu_pct_of_system:.1f}% 全机算力"
+        f"   算法: ({typical_qps} / {qps:.0f} QPS) × "
+        f"{avg_cpu_pct_of_system:.1f}% 全机算力"
     )
     print(f"   占单核 CPU:      {(typical_qps / qps) * avg_cpu:.2f}%")
     # 根据占全机总算力动态给出结论
