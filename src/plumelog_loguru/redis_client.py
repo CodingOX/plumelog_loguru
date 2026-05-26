@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
 from typing import Any
 
 import redis.asyncio as redis
@@ -40,6 +41,17 @@ class AsyncRedisClient:
         # 从配置中获取重试参数
         self.retry_count = config.retry_count
         self.retry_delay = config.retry_delay
+
+    def _sanitize_error(self, error: Exception) -> str:
+        """对异常消息中可能包含的 Redis 密码进行脱敏
+
+        redis.asyncio 的 ConnectionError 在某些版本中会将完整连接参数（含密码）
+        包含在异常消息中，直接输出会导致密码泄露。
+        """
+        msg = str(error)
+        if self.config.redis_password:
+            msg = msg.replace(self.config.redis_password, "***")
+        return msg
 
     async def connect(self) -> None:
         """建立Redis连接和连接池
@@ -84,27 +96,47 @@ class AsyncRedisClient:
 
             print(
                 f"[Plumelog][PID:{pid}] Redis连接成功: "
-                f"{self.config.redis_host}:{self.config.redis_port}"
+                f"{self.config.redis_host}:{self.config.redis_port}",
+                file=sys.stderr,
             )
 
         except Exception as e:
-            print(f"[Plumelog][PID:{pid}] Redis连接失败: {e}")
+            print(
+                f"[Plumelog][PID:{pid}] Redis连接失败: {self._sanitize_error(e)}",
+                file=sys.stderr,
+            )
             self._connected = False
             await self._cleanup_on_error()
             raise ConnectionError(f"无法连接到Redis: {e}") from e
 
     async def disconnect(self) -> None:
-        """断开Redis连接并清理资源"""
+        """断开Redis连接并清理资源
+
+        分别关闭 redis 和 pool，避免前者异常时跳过后者的清理。
+        """
         pid = os.getpid()
         try:
             if self.redis:
-                await self.redis.aclose()
+                try:
+                    await self.redis.aclose()
+                except Exception:
+                    pass
             if self.pool:
-                await self.pool.aclose()
-            self._connected = False
-            print(f"[Plumelog][PID:{pid}] Redis连接已断开")
+                try:
+                    await self.pool.aclose()
+                except Exception:
+                    pass
+            print(f"[Plumelog][PID:{pid}] Redis连接已断开", file=sys.stderr)
         except Exception as e:
-            print(f"[Plumelog][PID:{pid}] 断开Redis连接时发生错误: {e}")
+            print(
+                f"[Plumelog][PID:{pid}] 断开Redis连接时发生错误: {self._sanitize_error(e)}",
+                file=sys.stderr,
+            )
+        finally:
+            # 无论关闭成功与否，统一清空引用、置状态，避免 _connected 漂移
+            self.redis = None
+            self.pool = None
+            self._connected = False
 
     async def _cleanup_on_error(self) -> None:
         """错误时的清理操作"""
@@ -144,6 +176,11 @@ class AsyncRedisClient:
         pid = os.getpid()
         redis_key = key or self.config.redis_key
 
+        # 序列化提前到 retry 循环外，避免 Redis 抖动时重复序列化
+        log_json = json.dumps(
+            log_record.to_dict(), ensure_ascii=False, separators=(",", ":")
+        )
+
         for attempt in range(self.retry_count):
             try:
                 # 检查连接状态
@@ -153,15 +190,10 @@ class AsyncRedisClient:
                         if self._ever_connected
                         else "Redis尚未建立连接，正在初始化..."
                     )
-                    print(f"[Plumelog][PID:{pid}] {status_text}")
+                    print(f"[Plumelog][PID:{pid}] {status_text}", file=sys.stderr)
                     await self.connect()
 
                 assert self.redis is not None, "Redis客户端应该已连接"
-
-                # 将日志记录转换为JSON字符串
-                log_json = json.dumps(
-                    log_record.to_dict(), ensure_ascii=False, separators=(",", ":")
-                )
 
                 # 发送单条日志
                 result: int = await self.redis.lpush(redis_key, log_json)  # type: ignore[misc]
@@ -195,6 +227,20 @@ class AsyncRedisClient:
         pid = os.getpid()
         redis_key = key or self.config.redis_key
 
+        # 单条日志优化：直接处理
+        if len(log_records) == 1:
+            return await self.send_log_record(log_records[0], key)
+
+        # 序列化提前到 retry 循环外，避免 Redis 抖动时重复序列化同一批日志
+        log_jsons = [
+            json.dumps(
+                log_record.to_dict(),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            for log_record in log_records
+        ]
+
         for attempt in range(self.retry_count):
             try:
                 # 检查连接状态
@@ -204,24 +250,11 @@ class AsyncRedisClient:
                         if self._ever_connected
                         else "Redis尚未建立连接，正在初始化..."
                     )
-                    print(f"[Plumelog][PID:{pid}] {status_text}")
+                    print(f"[Plumelog][PID:{pid}] {status_text}", file=sys.stderr)
                     await self.connect()
 
                 assert self.redis is not None, "Redis客户端应该已连接"
 
-                # 单条日志优化：直接处理
-                if len(log_records) == 1:
-                    return await self.send_log_record(log_records[0], key)
-
-                # 批量发送：先序列化所有日志为 JSON
-                log_jsons = [
-                    json.dumps(
-                        log_record.to_dict(),
-                        ensure_ascii=False,
-                        separators=(",", ":"),
-                    )
-                    for log_record in log_records
-                ]
                 # 单条 lpush 命令推入所有数据，消除 pipeline N+1 问题：
                 # 原实现逐条 lpush 仍需 Redis 解析 N 条命令，此处合并为 1 条。
                 await self.redis.lpush(redis_key, *log_jsons)  # type: ignore[misc]
@@ -247,8 +280,9 @@ class AsyncRedisClient:
         """
         pid = os.getpid()
         print(
-            "[Plumelog][PID:"
-            f"{pid}] Redis发送失败 (尝试 {attempt + 1}/{self.retry_count}): {error}"
+            f"[Plumelog][PID:{pid}] Redis发送失败 "
+            f"(尝试 {attempt + 1}/{self.retry_count}): {self._sanitize_error(error)}",
+            file=sys.stderr,
         )
 
         # 如果是连接错误，标记为未连接状态
@@ -258,10 +292,13 @@ class AsyncRedisClient:
         if attempt < self.retry_count - 1:
             # 指数退避重试
             delay = self.retry_delay * (2**attempt)
-            print(f"[Plumelog][PID:{pid}] 等待 {delay:.1f} 秒后重试...")
+            print(f"[Plumelog][PID:{pid}] 等待 {delay:.1f} 秒后重试...", file=sys.stderr)
             await asyncio.sleep(delay)
         else:
-            print(f"[Plumelog][PID:{pid}] Redis发送最终失败，丢失 {log_count} 条日志")
+            print(
+                f"[Plumelog][PID:{pid}] Redis发送最终失败，丢失 {log_count} 条日志",
+                file=sys.stderr,
+            )
 
     async def __aenter__(self) -> AsyncRedisClient:
         """异步上下文管理器入口"""

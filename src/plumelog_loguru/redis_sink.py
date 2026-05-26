@@ -7,6 +7,8 @@
 import asyncio
 import atexit
 import datetime
+import sys
+import time
 import threading
 from collections import deque
 from collections.abc import Callable, Coroutine
@@ -114,6 +116,27 @@ class RedisSink:
         # 仅首次真正使用时才注册 atexit 兜底，避免构造即注册
         self._atexit_registered = False
 
+        # 限频告警配置：高频路径的告警每 _warn_interval 秒最多打印一次，
+        # 避免故障/积压时 print() 产生 I/O 风暴
+        self._warn_counters: dict[str, int] = {}
+        self._warn_last_time: dict[str, float] = {}
+        self._warn_interval: float = 10.0
+
+    def _rate_limited_warn(self, category: str, message: str) -> None:
+        """限频告警输出：同类告警每 _warn_interval 秒最多打印一次，累计触发次数
+
+        用于替代故障/积压路径中的高频 print()，避免 I/O 风暴。
+        """
+        now = time.monotonic()
+        self._warn_counters[category] = self._warn_counters.get(category, 0) + 1
+        last = self._warn_last_time.get(category, 0.0)
+        if now - last >= self._warn_interval:
+            count = self._warn_counters[category]
+            suffix = f" (累计 {count} 次)" if count > 1 else ""
+            print(f"{message}{suffix}", file=sys.stderr)
+            self._warn_last_time[category] = now
+            self._warn_counters[category] = 0
+
     def _ensure_runtime(self) -> _AsyncRuntime:
         """按需启动专用事件循环，避免未使用的 sink 占用线程。"""
         if self._runtime is None:
@@ -146,7 +169,7 @@ class RedisSink:
             await self._transfer_temp_buffer_to_queue()
 
             self._initialized = True
-            print("[RedisSink] 异步组件初始化完成")
+            print("[RedisSink] 异步组件初始化完成", file=sys.stderr)
 
     def __call__(self, message: Record) -> None:
         """Loguru sink调用接口（同步入口）
@@ -159,14 +182,14 @@ class RedisSink:
         try:
             log_record = self._convert_to_log_record(message)
         except Exception as exc:  # noqa: BLE001
-            print(f"[RedisSink] 处理日志时发生错误: {exc}")
+            print(f"[RedisSink] 处理日志时发生错误: {exc}", file=sys.stderr)
             try:
                 message_text = str(
                     getattr(message, "record", {}).get("message", message)
                 )
-                print(f"[RedisSink] 降级输出: {message_text}")
+                print(f"[RedisSink] 降级输出: {message_text}", file=sys.stderr)
             except Exception:  # noqa: BLE001
-                print(f"[RedisSink] 降级输出: {str(message)}")
+                print(f"[RedisSink] 降级输出: {str(message)}", file=sys.stderr)
             return
 
         # 关闭流程已启动时不再提交到事件循环，改为暂存在临时缓存
@@ -182,7 +205,10 @@ class RedisSink:
 
         try:
             if not self._pending_submit_semaphore.acquire(blocking=False):
-                print("[RedisSink] 后台任务积压过高，日志写入临时缓存")
+                self._rate_limited_warn(
+                    "backpressure",
+                    "[RedisSink] 后台任务积压过高，日志写入临时缓存",
+                )
                 self._store_to_temp_buffer(log_record)
                 return
 
@@ -194,7 +220,10 @@ class RedisSink:
             # 若不 release，许可会持续流失，最终导致所有日志退化到
             # temp_buffer（系统假死）。
             self._pending_submit_semaphore.release()
-            print(f"[RedisSink] 提交日志处理任务失败: {exc}")
+            self._rate_limited_warn(
+                "submit_fail",
+                f"[RedisSink] 提交日志处理任务失败: {exc}",
+            )
             self._store_to_temp_buffer(log_record)
 
     def _sync_close_on_exit(self) -> None:
@@ -213,7 +242,7 @@ class RedisSink:
                 )
                 future.result(timeout=5.0)
         except Exception as e:
-            print(f"[RedisSink] atexit 清理失败: {e}")
+            print(f"[RedisSink] atexit 清理失败: {e}", file=sys.stderr)
         finally:
             if self._runtime and not self._runtime._stopped:
                 self._runtime.stop()
@@ -239,12 +268,15 @@ class RedisSink:
         try:
             exception = future.exception()
         except Exception as exc:  # noqa: BLE001
-            print(f"[RedisSink] 检查后台任务状态失败: {exc}")
+            print(f"[RedisSink] 检查后台任务状态失败: {exc}", file=sys.stderr)
             return
 
         if exception:
             # 后台异常不应该悄无声息，需要打印以便排查
-            print(f"[RedisSink] 后台处理日志抛出异常: {exception}")
+            self._rate_limited_warn(
+                "future_exception",
+                f"[RedisSink] 后台处理日志抛出异常: {exception}",
+            )
 
     async def _flush_temp_buffer_to_redis(self) -> None:
         """在关闭时将临时缓存发送到Redis"""
@@ -255,11 +287,11 @@ class RedisSink:
         if not buffered_logs:
             return
 
-        print(f"[RedisSink] 发送剩余的 {len(buffered_logs)} 条临时缓存日志...")
+        print(f"[RedisSink] 发送剩余的 {len(buffered_logs)} 条临时缓存日志...", file=sys.stderr)
         # 关闭阶段只做最后一次尽力投递；失败时必须显式暴露丢弃数量。
         success = await self.redis_client.send_log_records(buffered_logs)
         if not success:
-            print(f"[RedisSink] 临时缓存发送失败，丢弃 {len(buffered_logs)} 条日志")
+            print(f"[RedisSink] 临时缓存发送失败，丢弃 {len(buffered_logs)} 条日志", file=sys.stderr)
 
     async def _async_handle_log(self, log_record: LogRecord) -> None:
         """异步处理日志记录
@@ -277,22 +309,30 @@ class RedisSink:
             await self._log_queue.put(log_record)
 
         except Exception as e:
-            print(f"[RedisSink] 异步处理日志失败: {e}")
+            self._rate_limited_warn(
+                "async_handle_fail",
+                f"[RedisSink] 异步处理日志失败: {e}",
+            )
             # 回退到临时缓存等待后续重试
             self._store_to_temp_buffer(log_record)
 
     def _store_to_temp_buffer(self, log_record: LogRecord) -> None:
         """将日志存储到临时缓存
 
+        deque(maxlen=N) 会在满时自动淘汰最旧记录，无需手动 popleft()。
+
         Args:
             log_record: 日志记录对象
         """
         with self._temp_buffer_lock:
-            if len(self._temp_buffer) >= self.config.temp_buffer_max_size:
-                # 保留最新日志，丢弃最旧的记录
-                self._temp_buffer.popleft()
-                print("[RedisSink] 临时缓存已满，移除最老的日志")
+            is_full = len(self._temp_buffer) >= self.config.temp_buffer_max_size
+            # deque(maxlen=N) 自动处理溢出，无需手动 popleft
             self._temp_buffer.append(log_record)
+            if is_full:
+                self._rate_limited_warn(
+                    "temp_buffer_full",
+                    "[RedisSink] 临时缓存已满，最旧日志被自动淘汰",
+                )
 
     async def _transfer_temp_buffer_to_queue(self) -> None:
         """将临时缓存的日志转移到正式队列"""
@@ -312,7 +352,7 @@ class RedisSink:
                 await self._log_queue.put(log_record)
                 transferred_count += 1
             except Exception as exc:  # noqa: BLE001
-                print(f"[RedisSink] 转移临时缓存日志失败: {exc}")
+                print(f"[RedisSink] 转移临时缓存日志失败: {exc}", file=sys.stderr)
                 # 将未能转移的日志重新放回缓存，避免直接丢失
                 with self._temp_buffer_lock:
                     remaining = buffered_logs[transferred_count:]
@@ -323,7 +363,7 @@ class RedisSink:
                 break
 
         if transferred_count > 0:
-            print(f"[RedisSink] 已将 {transferred_count} 条临时缓存日志转移到正式队列")
+            print(f"[RedisSink] 已将 {transferred_count} 条临时缓存日志转移到正式队列", file=sys.stderr)
 
     async def _log_consumer(self) -> None:
         """后台消费者任务，持续从队列中获取日志并发送到Redis"""
@@ -352,7 +392,10 @@ class RedisSink:
                 if not success:
                     # AsyncRedisClient 内部已经执行有限重试；这里不再回灌队列，
                     # 避免 Redis 长期不可用时形成无限重试并阻塞 close()。
-                    print(f"[RedisSink] Redis发送最终失败，丢弃 {len(batch)} 条日志")
+                    self._rate_limited_warn(
+                        "redis_send_fail",
+                        f"[RedisSink] Redis发送最终失败，丢弃 {len(batch)} 条日志",
+                    )
 
             except asyncio.TimeoutError:
                 if not self._running:
@@ -360,7 +403,7 @@ class RedisSink:
                 continue
 
             except Exception as e:  # noqa: BLE001
-                print(f"[RedisSink] 消费者任务异常: {e}")
+                print(f"[RedisSink] 消费者任务异常: {e}", file=sys.stderr)
                 # 留出冷却时间，避免在异常状态下频繁重试
                 await asyncio.sleep(5)
 
@@ -420,7 +463,7 @@ class RedisSink:
         if not self._runtime:
             return
 
-        print("[RedisSink] 正在关闭...")
+        print("[RedisSink] 正在关闭...", file=sys.stderr)
         if not self._initialized:
             await self._flush_temp_buffer_to_redis()
             await self.redis_client.disconnect()
@@ -433,13 +476,13 @@ class RedisSink:
             try:
                 await asyncio.wait_for(self._log_queue.join(), timeout=10.0)
             except asyncio.TimeoutError:
-                print("[RedisSink] 等待队列清空超时，将继续关闭并清理剩余日志")
+                print("[RedisSink] 等待队列清空超时，将继续关闭并清理剩余日志", file=sys.stderr)
 
         if self._consumer_task and not self._consumer_task.done():
             try:
                 await asyncio.wait_for(self._consumer_task, timeout=10.0)
             except asyncio.TimeoutError:
-                print("[RedisSink] 消费者任务超时，强制取消")
+                print("[RedisSink] 消费者任务超时，强制取消", file=sys.stderr)
                 self._consumer_task.cancel()
                 try:
                     await self._consumer_task
@@ -458,12 +501,13 @@ class RedisSink:
                     break
 
             if remaining_logs:
-                print(f"[RedisSink] 发送剩余的 {len(remaining_logs)} 条队列日志...")
+                print(f"[RedisSink] 发送剩余的 {len(remaining_logs)} 条队列日志...", file=sys.stderr)
                 success = await self.redis_client.send_log_records(remaining_logs)
                 if not success:
                     print(
                         "[RedisSink] 剩余队列日志发送失败，"
-                        f"丢弃 {len(remaining_logs)} 条日志"
+                        f"丢弃 {len(remaining_logs)} 条日志",
+                        file=sys.stderr,
                     )
 
         await self.redis_client.disconnect()
@@ -472,7 +516,7 @@ class RedisSink:
         self._log_queue = None
         self._consumer_task = None
 
-        print("[RedisSink] 已成功关闭")
+        print("[RedisSink] 已成功关闭", file=sys.stderr)
 
     async def close(self) -> None:
         """关闭Redis Sink，停止后台任务并清理资源"""
@@ -495,7 +539,7 @@ class RedisSink:
                 self._runtime.stop()
                 self._runtime = None
 
-        print("[RedisSink] 关闭流程结束")
+        print("[RedisSink] 关闭流程结束", file=sys.stderr)
 
     async def __aenter__(self) -> "RedisSink":
         """异步上下文管理器入口"""
