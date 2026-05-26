@@ -19,11 +19,11 @@ jobs:
         os: [ubuntu-latest, ubuntu-24.04-arm]  # x86_64 + ARM64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # 使用 astral 官方 action 安装 uv，启用依赖缓存
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true

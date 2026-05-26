@@ -22,10 +22,10 @@ jobs:
         os: [ubuntu-latest, ubuntu-24.04-arm]  # x86_64 + ARM64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
@@ -55,10 +55,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
           enable-cache: true
@@ -96,7 +96,7 @@ jobs:
     steps:
       # publish job 只需要 uv 工具和构建产物，无需 checkout 源码
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
 
       # 从上一个 job 下载构建产物（不重新构建，保证产物一致性）
       - name: Download dist artifacts
