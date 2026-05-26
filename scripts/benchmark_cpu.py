@@ -153,7 +153,16 @@ def run_benchmark(num_threads=4, logs_per_thread=25000):
         f"   算法: ({typical_qps} / {qps:.0f} QPS) × {avg_cpu_pct_of_system:.1f}% 全机算力"
     )
     print(f"   占单核 CPU:      {(typical_qps / qps) * avg_cpu:.2f}%")
-    print(f"   占全机总算力:    {estimated_cpu_at_typical:.3f}%  ← 几乎可以忽略不计")
+    # 根据占全机总算力动态给出结论
+    if estimated_cpu_at_typical < 1.0:
+        verdict = "✅ 极轻量，几乎可以忽略不计"
+    elif estimated_cpu_at_typical < 5.0:
+        verdict = "✅ 影响轻微，完全可接受"
+    elif estimated_cpu_at_typical < 10.0:
+        verdict = "⚠️  有一定开销，建议在低核机器上关注"
+    else:
+        verdict = "❌ 开销较高，建议调大 batch_size 或降低日志频率"
+    print(f"   占全机总算力:    {estimated_cpu_at_typical:.3f}%  ← {verdict}")
     print("   (基于线性比例假设：QPS 越低，CPU 开销等比例缩小)")
     print("=" * 50)
     print("💡 结论参考：")
