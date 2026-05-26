@@ -35,16 +35,6 @@ Issues = "https://github.com/CodingOX/plumelog-loguru/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["src/plumelog_loguru"]
 
-[tool.black]
-line-length = 88
-target-version = ["py310"]
-include = '\.pyi?$'
-
-[tool.isort]
-profile = "black"
-line_length = 88
-known_first_party = ["plumelog_loguru"]
-
 [tool.mypy]
 python_version = "3.10"
 strict = true
@@ -71,6 +61,13 @@ select = [
 ]
 ignore = []
 
+[tool.ruff.format]
+# ruff format 兼容 black 风格，统一替代 black + isort
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -90,8 +87,6 @@ dev = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=7.0.0",
-    "black>=25.9.0",
-    "isort>=5.12.0",
     "mypy>=1.18.2",
     "ruff>=0.13.2",
     "build>=0.10.0",

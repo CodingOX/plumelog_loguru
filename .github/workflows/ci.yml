@@ -9,13 +9,14 @@ on:
 
 jobs:
   test:
-    name: Test (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: Test (Python ${{ matrix.python-version }} / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false  # 某一版本失败不中断其他版本
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
+        os: [ubuntu-latest, ubuntu-24.04-arm]  # x86_64 + ARM64
 
     steps:
       - uses: actions/checkout@v4
@@ -31,8 +32,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --all-extras --dev
 
+      # Ruff 格式检查
+      - name: Run format check (ruff format)
+        run: uv run ruff format --check .
+
       # Ruff 静态检查
-      - name: Run linting (ruff)
+      - name: Run linting (ruff check)
         run: uv run ruff check .
 
       # Mypy 类型检查，指向 src/ 目录
