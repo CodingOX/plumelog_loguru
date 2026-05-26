@@ -1,44 +1,44 @@
 """数据模型模块
 
-定义Plumelog系统中使用的所有数据实体类，替代字典作为数据交互载体。
-所有模型都包含完整的类型提示和验证逻辑。
+定义Plumelog系统中使用的所有数据实体类。
+
+设计决策：
+- LogRecord/CallerInfo/SystemInfo：高频创建的内部传递类，使用 dataclass(slots=True)
+  以大幅降低实例化时的 CPU 和内存开销（相比 Pydantic BaseModel 低 1-2 个数量级）。
+- RedisConnectionInfo/BatchConfig：配置类，保留 Pydantic 以利用字段范围校验能力。
 """
 
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class LogRecord(BaseModel):
-    """Plumelog日志记录数据模型
+@dataclass(slots=True)
+class LogRecord:
+    """Plumelog日志记录数据模型（高频创建，使用 dataclass+slots 降低开销）
 
-    表示一条完整的日志记录，包含所有必要的字段信息。
-    用于替代原有的字典结构，提供强类型保证。
+    slots=True 避免每个实例的 __dict__，进一步减少内存占用。
+    接口与原 Pydantic 版本保持兼容（关键字参数构造 + to_dict()）。
     """
 
-    model_config = ConfigDict(
-        str_strip_whitespace=True,
-        validate_assignment=True,
-        frozen=False,
-    )
-
-    server_name: str = Field(..., description="服务器名称或IP地址")
-    app_name: str = Field(..., description="应用名称")
-    env: str = Field(..., description="运行环境")
-    method: str = Field(..., description="调用方法名")
-    content: str = Field(..., description="日志内容")
-    log_level: str = Field(..., description="日志级别")
-    class_name: str = Field(..., description="调用类名")
-    thread_name: str = Field(..., description="线程名称")
-    seq: int = Field(..., ge=0, description="序列号")
-    date_time: str = Field(..., description="格式化的日期时间字符串")
-    dt_time: int = Field(..., ge=0, description="Unix时间戳（毫秒）")
+    server_name: str
+    app_name: str
+    env: str
+    method: str
+    content: str
+    log_level: str
+    class_name: str
+    thread_name: str
+    seq: int
+    date_time: str
+    dt_time: int
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典格式，用于JSON序列化
 
         Returns:
-            包含所有字段的字典
+            包含所有字段的字典（key 为 Plumelog 标准 camelCase 格式）
         """
         return {
             "serverName": self.server_name,
@@ -55,16 +55,15 @@ class LogRecord(BaseModel):
         }
 
 
-class CallerInfo(BaseModel):
-    """调用者信息数据模型
+@dataclass(frozen=True, slots=True)
+class CallerInfo:
+    """调用者信息数据模型（内部传递用，frozen dataclass）
 
-    封装从调用栈中提取的类名和方法名信息。
+    frozen=True 保证不可变性，与原 Pydantic frozen 版本行为一致。
     """
 
-    model_config = ConfigDict(frozen=True)
-
-    class_name: str | None = Field(None, description="调用者类名")
-    method_name: str | None = Field(None, description="调用者方法名")
+    class_name: str | None
+    method_name: str | None
 
     @property
     def class_name_safe(self) -> str:
@@ -77,21 +76,17 @@ class CallerInfo(BaseModel):
         return self.method_name or "unknown"
 
 
-class SystemInfo(BaseModel):
-    """系统信息数据模型
+@dataclass(frozen=True, slots=True)
+class SystemInfo:
+    """系统信息数据模型（内部传递用，frozen dataclass）"""
 
-    封装服务器和主机相关的系统信息。
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    server_name: str = Field(..., description="服务器IP地址")
-    host_name: str = Field(..., description="主机名")
-    thread_name: str = Field(..., description="当前线程名")
+    server_name: str
+    host_name: str
+    thread_name: str
 
 
 class RedisConnectionInfo(BaseModel):
-    """Redis连接信息数据模型
+    """Redis连接信息数据模型（配置类，保留 Pydantic 字段校验）
 
     封装Redis连接的所有必要参数。
     """
@@ -106,7 +101,7 @@ class RedisConnectionInfo(BaseModel):
 
 
 class BatchConfig(BaseModel):
-    """批处理配置数据模型
+    """批处理配置数据模型（配置类，保留 Pydantic 字段校验）
 
     封装日志批量发送的配置参数。
     """
