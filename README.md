@@ -324,10 +324,11 @@ uv sync --dev
 uv run pytest
 
 # 代码格式化
-uv run format
+uv run ruff format .
 
-# 类型检查
-uv run lint
+# 类型检查与静态检查
+uv run ruff check .
+uv run mypy src/
 ```
 
 ### 项目结构
