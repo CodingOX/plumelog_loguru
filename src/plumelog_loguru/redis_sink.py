@@ -187,12 +187,8 @@ class RedisSink:
                 return
 
             future = self._ensure_runtime().submit(self._async_handle_log(log_record))
-
-            def _on_done(done_future: Future[Any]) -> None:
-                self._pending_submit_semaphore.release()
-                self._log_future_exception(done_future)
-
-            future.add_done_callback(_on_done)
+            # 使用预绑定实例方法而非每次创建闭包，避免高吞吐下大量短生命周期函数对象
+            future.add_done_callback(self._on_submit_done)
         except Exception as exc:  # noqa: BLE001
             # 关键：acquire 已成功但 submit 失败时必须归还许可。
             # 若不 release，许可会持续流失，最终导致所有日志退化到 temp_buffer（系统假死）。
@@ -220,6 +216,15 @@ class RedisSink:
         finally:
             if self._runtime and not self._runtime._stopped:
                 self._runtime.stop()
+
+    def _on_submit_done(self, done_future: "Future[Any]") -> None:
+        """submit 完成回调：就此属方法预绑定，避免每条日志创建闭包对象
+
+        预绑定 vs 闭包的区别：闭包在每次调用时分配新函数对象，高吸吐下增加 GC 压力；
+        实例方法在对象生命周期内只存在一份，不产生额外分配。
+        """
+        self._pending_submit_semaphore.release()
+        self._log_future_exception(done_future)
 
     async def _run_in_runtime(self, coro: Coroutine[Any, Any, T]) -> T:
         """在线程事件循环中执行协程并返回结果"""

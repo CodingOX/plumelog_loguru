@@ -44,9 +44,21 @@ class AsyncRedisClient:
     async def connect(self) -> None:
         """建立Redis连接和连接池
 
+        防御性设计：每次连接前先关闭旧连接池，避免被直接调用时泄漏旧 pool。
+        正常路径下旧 pool 已由 _cleanup_on_error() 关闭，此处为额外安全兜底。
+
         Raises:
             ConnectionError: 当无法连接到Redis时
         """
+        # 防御性清理旧连接池（正常由 _cleanup_on_error 处理；此处兜底防止直接调用泄漏）
+        if self.pool is not None:
+            try:
+                await self.pool.aclose()
+            except Exception:
+                pass
+            self.pool = None
+            self.redis = None
+
         pid = os.getpid()
         try:
             # 创建连接池
