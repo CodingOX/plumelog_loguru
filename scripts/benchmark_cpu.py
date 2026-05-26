@@ -85,10 +85,15 @@ def run_benchmark(num_threads=4, logs_per_thread=25000):
         t.join()
         
     # 5. 等待队列排空并优雅关闭
-    # 因为 close 是 async 函数，我们把它抛给后台事件循环去执行并等待
+    # 关键：close() 必须从主线程（非后台事件循环线程）调用。
+    # 原因：close() 内部最终会调用 _runtime.stop() -> thread.join()，
+    # 若通过 run_coroutine_threadsafe 把 close() 扔进后台事件循环线程，
+    # 则线程将自己等待自己（join current thread），必然死锁。
+    # 正确做法：主线程用 asyncio.run() 创建一个临时事件循环来驱动 close()，
+    # close() 内部通过 _run_in_runtime 把清理工作委托给后台线程完成，
+    # 最后 close() 在主线程侧调用 _runtime.stop() 顺利 join 后台线程。
     import asyncio
-    loop = sink._ensure_runtime().loop
-    asyncio.run_coroutine_threadsafe(sink.close(), loop).result()
+    asyncio.run(sink.close())
     
     end_time = time.time()
     stop_event.set()
