@@ -1,0 +1,106 @@
+# Release 工作流：push v* tag 时触发（如 v0.2.0）
+# 流程：test → build → publish（三个 job 串行，前置失败则阻断发布）
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"  # 匹配 v0.1.0、v1.0.0-beta 等格式
+
+jobs:
+  # ────────────────────────────────────────────
+  # Job 1: 矩阵测试 + lint/type check
+  # ────────────────────────────────────────────
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: true  # 发布场景：任一版本失败立即中断
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked --all-extras --dev
+
+      - name: Run linting (ruff)
+        run: uv run ruff check .
+
+      - name: Run type checking (mypy)
+        run: uv run mypy src/
+
+      - name: Run tests
+        run: uv run pytest tests/ -v --tb=short
+
+  # ────────────────────────────────────────────
+  # Job 2: 构建分发包（wheel + sdist）
+  # 依赖 test 全部通过才运行
+  # ────────────────────────────────────────────
+  build:
+    name: Build distribution packages
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      # 构建 wheel 和 sdist，产物默认输出到 dist/
+      - name: Build packages
+        run: uv build
+
+      # 将构建产物上传为 artifact，供 publish job 使用
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  # ────────────────────────────────────────────
+  # Job 3: 发布到 PyPI（API Token 认证方式）
+  # 依赖 build 成功才运行
+  # ────────────────────────────────────────────
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+
+    # Trusted Publishing (OIDC) 需要此权限，无需配置任何 Secret/Token
+    # 前提：在 PyPI 项目页面 → Publishing 中完成 Trusted Publisher 配置
+    permissions:
+      id-token: write
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/plumelog-loguru
+
+    steps:
+      # publish job 只需要 uv 工具和构建产物，无需 checkout 源码
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      # 从上一个 job 下载构建产物（不重新构建，保证产物一致性）
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      # Trusted Publishing：uv 自动获取 OIDC token，无需手动配置 PyPI token
+      - name: Publish to PyPI
+        run: uv publish

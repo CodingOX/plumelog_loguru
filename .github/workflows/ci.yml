@@ -1,0 +1,48 @@
+# CI 工作流：在 push main 和 PR 时触发
+# 覆盖 Python 3.10 / 3.11 / 3.12 矩阵
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false  # 某一版本失败不中断其他版本
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 使用 astral 官方 action 安装 uv，启用依赖缓存
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      # 严格按 uv.lock 安装所有依赖（含 dev extras）
+      - name: Install dependencies
+        run: uv sync --locked --all-extras --dev
+
+      # Ruff 静态检查
+      - name: Run linting (ruff)
+        run: uv run ruff check .
+
+      # Mypy 类型检查，指向 src/ 目录
+      - name: Run type checking (mypy)
+        run: uv run mypy src/
+
+      # 运行测试，输出覆盖率报告
+      - name: Run tests
+        run: uv run pytest tests/ -v --tb=short
+
+      # 验证包可以正常构建（不发布，仅校验产物）
+      - name: Test package build
+        run: uv build
