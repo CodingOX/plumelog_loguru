@@ -285,7 +285,9 @@ def test_get_caller_info_not_called_when_loguru_provides_fields(
         caller_info_call_count += 1
         return original_get_caller_info(depth=depth)
 
-    monkeypatch.setattr(sink.field_extractor, "get_caller_info", patched_get_caller_info)
+    monkeypatch.setattr(
+        sink.field_extractor, "get_caller_info", patched_get_caller_info
+    )
 
     # Loguru 已提供 function 和 name，不应触发 inspect
     message = SimpleNamespace(
