@@ -115,22 +115,34 @@ def run_benchmark(num_threads=4, logs_per_thread=25000):
     core_count = psutil.cpu_count(logical=True)
     max_theoretical_cpu = core_count * 100
 
+    # 折算为占全机总 CPU 算力的百分比（核心直觉指标）
+    avg_cpu_pct_of_system = avg_cpu / max_theoretical_cpu * 100
+    max_cpu_pct_of_system = max_cpu / max_theoretical_cpu * 100
+
+    # 估算真实业务下（假设 100 QPS）的 CPU 占用
+    typical_qps = 100
+    estimated_cpu_at_typical = (typical_qps / qps) * avg_cpu_pct_of_system if qps > 0 else 0
+
     print("\n" + "=" * 50)
     print("📊 压测结果报告")
     print("=" * 50)
-    print(f"⏱️  总耗时:       {duration:.2f} 秒")
-    print(f"⚡ 吞吐量(QPS): {qps:.0f} 条/秒")
+    print(f"⏱️  总耗时:           {duration:.2f} 秒")
+    print(f"⚡ 吞吐量(QPS):     {qps:.0f} 条/秒")
     print("-" * 50)
-    print(f"🖥️  CPU 峰值:    {max_cpu:.1f}% (系统总核数: {core_count}, 理论满载: {max_theoretical_cpu}%)")
-    print(f"🖥️  CPU 平均:    {avg_cpu:.1f}%  <-- 重点关注这个指标")
-    print(f"💾  内存 峰值:   {max_mem:.1f} MB")
-    print(f"💾  内存 平均:   {avg_mem:.1f} MB")
+    print(f"🖥️  系统总核数:      {core_count} 核 (理论满载: {max_theoretical_cpu}%)")
+    print(f"🖥️  CPU 峰值:        {max_cpu:.1f}%  = 占全机算力 {max_cpu_pct_of_system:.1f}%")
+    print(f"🖥️  CPU 平均:        {avg_cpu:.1f}%  = 占全机算力 {avg_cpu_pct_of_system:.1f}%  <-- 重点关注")
+    print(f"💾  内存 峰值:       {max_mem:.1f} MB")
+    print(f"💾  内存 平均:       {avg_mem:.1f} MB")
+    print("-" * 50)
+    print(f"📌 真实场景估算 (按 {typical_qps} QPS 折算):")
+    print(f"   占单核 CPU:      {(typical_qps / qps) * avg_cpu:.2f}%")
+    print(f"   占全机总算力:    {estimated_cpu_at_typical:.3f}%  ← 几乎可以忽略不计")
     print("=" * 50)
     print("💡 结论参考：")
     print("1. Python 单核最高 CPU 为 100%。如果平均 CPU 在 30% 以下，说明极轻量。")
     print("2. 超过 100% 说明利用了多核（主业务线程占核心，日志后台线程占核心）。")
-    print("3. 当 QPS 能达到数万以上且 CPU 占用合理时，普通应用的日志量（几百QPS）")
-    print("   对其 CPU 的影响几乎可以忽略不计。")
+    print("3. '占全机总算力' 才是真实的系统影响指标，数值越低说明对业务侵占越小。")
 
 if __name__ == "__main__":
     run_benchmark(num_threads=4, logs_per_thread=25000)
