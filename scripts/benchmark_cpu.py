@@ -107,13 +107,16 @@ def run_benchmark(num_threads=4, logs_per_thread=25000):
     max_mem = max(mem_data) if mem_data else 0
     avg_mem = sum(mem_data) / len(mem_data) if mem_data else 0
 
+    core_count = psutil.cpu_count(logical=True)
+    max_theoretical_cpu = core_count * 100
+
     print("\n" + "=" * 50)
     print("📊 压测结果报告")
     print("=" * 50)
     print(f"⏱️  总耗时:       {duration:.2f} 秒")
     print(f"⚡ 吞吐量(QPS): {qps:.0f} 条/秒")
     print("-" * 50)
-    print(f"🖥️  CPU 峰值:    {max_cpu:.1f}%")
+    print(f"🖥️  CPU 峰值:    {max_cpu:.1f}% (系统总核数: {core_count}, 理论满载: {max_theoretical_cpu}%)")
     print(f"🖥️  CPU 平均:    {avg_cpu:.1f}%  <-- 重点关注这个指标")
     print(f"💾  内存 峰值:   {max_mem:.1f} MB")
     print(f"💾  内存 平均:   {avg_mem:.1f} MB")
