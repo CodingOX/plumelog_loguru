@@ -100,6 +100,7 @@ class FieldExtractor:
         Returns:
             调用者信息数据模型实例
         """
+        frame = None
         try:
             frame = inspect.currentframe()
             # 向上遍历调用栈
@@ -125,6 +126,8 @@ class FieldExtractor:
 
         except Exception:
             return CallerInfo(class_name=None, method_name=None)
+        finally:
+            del frame
 
     def get_next_seq(self) -> int:
         """获取下一个序列号（线程安全）

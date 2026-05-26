@@ -1,14 +1,15 @@
 """测试配置管理模块"""
 
-import os
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
+
 from plumelog_loguru.config import PlumelogSettings
 
 
 class TestPlumelogSettings:
     """测试Plumelog配置类"""
 
-    def test_default_settings(self):
+    def test_default_settings(self) -> None:
         """测试默认配置"""
         settings = PlumelogSettings()
 
@@ -22,7 +23,7 @@ class TestPlumelogSettings:
         assert settings.batch_interval_seconds == 2.0
         assert settings.retry_count == 3
 
-    def test_custom_settings(self):
+    def test_custom_settings(self) -> None:
         """测试自定义配置"""
         settings = PlumelogSettings(
             app_name="test_app",
@@ -40,7 +41,7 @@ class TestPlumelogSettings:
         assert settings.redis_password == "secret123"
         assert settings.batch_size == 50
 
-    def test_env_variable_override(self, monkeypatch):
+    def test_env_variable_override(self, monkeypatch: MonkeyPatch) -> None:
         """测试环境变量覆盖配置"""
         # 设置环境变量
         monkeypatch.setenv("PLUMELOG_APP_NAME", "env_app")
@@ -57,7 +58,7 @@ class TestPlumelogSettings:
         assert settings.redis_port == 6380
         assert settings.batch_size == 200
 
-    def test_redis_connection_info(self):
+    def test_redis_connection_info(self) -> None:
         """测试Redis连接信息属性"""
         settings = PlumelogSettings(
             redis_host="test.redis.com",
@@ -75,7 +76,7 @@ class TestPlumelogSettings:
         assert redis_info.password == "test123"
         assert redis_info.max_connections == 10
 
-    def test_batch_config(self):
+    def test_batch_config(self) -> None:
         """测试批处理配置属性"""
         settings = PlumelogSettings(
             batch_size=75, batch_interval_seconds=1.5, queue_max_size=5000
@@ -87,7 +88,7 @@ class TestPlumelogSettings:
         assert batch_config.batch_interval_seconds == 1.5
         assert batch_config.queue_max_size == 5000
 
-    def test_get_redis_url_with_password(self):
+    def test_get_redis_url_with_password(self) -> None:
         """测试带密码的Redis URL生成"""
         settings = PlumelogSettings(
             redis_host="redis.example.com",
@@ -101,7 +102,7 @@ class TestPlumelogSettings:
 
         assert url == expected
 
-    def test_get_redis_url_without_password(self):
+    def test_get_redis_url_without_password(self) -> None:
         """测试不带密码的Redis URL生成"""
         settings = PlumelogSettings(
             redis_host="localhost", redis_port=6379, redis_db=0, redis_password=None
@@ -112,7 +113,21 @@ class TestPlumelogSettings:
 
         assert url == expected
 
-    def test_validation_errors(self):
+    def test_get_redis_url_encodes_password_reserved_characters(self) -> None:
+        """密码中的保留字符应进行 URL 编码"""
+        settings = PlumelogSettings(
+            redis_host="redis.example.com",
+            redis_port=6379,
+            redis_db=1,
+            redis_password="a@b:c/d#e",
+        )
+
+        assert (
+            settings.get_redis_url()
+            == "redis://:a%40b%3Ac%2Fd%23e@redis.example.com:6379/1"
+        )
+
+    def test_validation_errors(self) -> None:
         """测试配置验证错误"""
         # 测试无效的端口号
         with pytest.raises(ValueError):

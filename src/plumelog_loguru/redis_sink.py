@@ -5,18 +5,22 @@
 """
 
 import asyncio
-from typing import Any, Callable, TYPE_CHECKING, Protocol
+import datetime
+import threading
+from collections import deque
+from collections.abc import Callable, Coroutine
+from concurrent.futures import Future
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+
+from .config import PlumelogSettings
+from .extractor import FieldExtractor
+from .models import LogRecord
+from .redis_client import AsyncRedisClient
 
 if TYPE_CHECKING:
     from loguru import Record
 else:
     Record = Any
-
-
-import threading
-from collections import deque
-from concurrent.futures import Future
-from typing import Coroutine, TypeVar
 
 
 class LogSink(Protocol):
@@ -25,13 +29,6 @@ class LogSink(Protocol):
     def __call__(self, message: Record) -> None:
         """处理日志消息"""
         ...
-
-
-from .config import PlumelogSettings
-from .extractor import FieldExtractor
-from .models import LogRecord
-from .redis_client import AsyncRedisClient
-
 
 T = TypeVar("T")
 
@@ -103,14 +100,27 @@ class RedisSink:
         )
         self._temp_buffer_lock = threading.Lock()
 
-        # 专用运行时为多线程环境提供统一的事件循环与调度能力
-        self._runtime: _AsyncRuntime | None = _AsyncRuntime()
+        # 专用运行时按需启动，避免仅构造 sink 时就占用后台线程。
+        self._runtime: _AsyncRuntime | None = None
+        self._runtime_lock = threading.Lock()
         self._closing = False
+        self._pending_submit_limit = (
+            self.config.queue_max_size + self.config.temp_buffer_max_size
+        )
+        self._pending_submit_semaphore = threading.BoundedSemaphore(
+            self._pending_submit_limit
+        )
+
+    def _ensure_runtime(self) -> _AsyncRuntime:
+        """按需启动专用事件循环，避免未使用的 sink 占用线程。"""
+        if self._runtime is None:
+            with self._runtime_lock:
+                if self._runtime is None:
+                    self._runtime = _AsyncRuntime()
+        return self._runtime
 
     async def _ensure_initialized(self) -> None:
-        """确保异步组件已初始化
-            
-        """
+        """确保异步组件已初始化"""
         if self._initialized:
             return
 
@@ -157,23 +167,31 @@ class RedisSink:
             return
 
         # 关闭流程已启动时不再提交到事件循环，改为暂存在临时缓存
-        if self._closing or self._runtime is None:
+        if self._closing:
             self._store_to_temp_buffer(log_record)
             return
 
         try:
-            future = self._runtime.submit(self._async_handle_log(log_record))
-            future.add_done_callback(self._log_future_exception)
+            if not self._pending_submit_semaphore.acquire(blocking=False):
+                print("[RedisSink] 后台任务积压过高，日志写入临时缓存")
+                self._store_to_temp_buffer(log_record)
+                return
+
+            future = self._ensure_runtime().submit(self._async_handle_log(log_record))
+
+            def _on_done(done_future: Future[Any]) -> None:
+                self._pending_submit_semaphore.release()
+                self._log_future_exception(done_future)
+
+            future.add_done_callback(_on_done)
         except Exception as exc:  # noqa: BLE001
             print(f"[RedisSink] 提交日志处理任务失败: {exc}")
             self._store_to_temp_buffer(log_record)
 
     async def _run_in_runtime(self, coro: Coroutine[Any, Any, T]) -> T:
         """在线程事件循环中执行协程并返回结果"""
-        if self._runtime is None:
-            raise RuntimeError("事件循环已停止，无法提交任务")
         # wrap_future 允许在当前协程中等待跨线程执行结果
-        future = self._runtime.submit(coro)
+        future = self._ensure_runtime().submit(coro)
         return await asyncio.wrap_future(future)
 
     @staticmethod
@@ -199,8 +217,10 @@ class RedisSink:
             return
 
         print(f"[RedisSink] 发送剩余的 {len(buffered_logs)} 条临时缓存日志...")
-        # 关闭阶段直接批量投递到 Redis，避免数据遗失
-        await self.redis_client.send_log_records(buffered_logs)
+        # 关闭阶段只做最后一次尽力投递；失败时必须显式暴露丢弃数量。
+        success = await self.redis_client.send_log_records(buffered_logs)
+        if not success:
+            print(f"[RedisSink] 临时缓存发送失败，丢弃 {len(buffered_logs)} 条日志")
 
     async def _async_handle_log(self, log_record: LogRecord) -> None:
         """异步处理日志记录
@@ -287,19 +307,13 @@ class RedisSink:
 
                 success = await self.redis_client.send_log_records(batch)
 
-                if success:
-                    for _ in batch:
-                        self._log_queue.task_done()
-                else:
-                    for _ in batch:
-                        self._log_queue.task_done()
-                    # 发送失败时重新入队，等待下一轮重试
-                    for log in batch:
-                        try:
-                            await self._log_queue.put(log)
-                        except asyncio.QueueFull:
-                            print("[RedisSink] 队列已满，无法重新排队失败的日志")
-                            break
+                for _ in batch:
+                    self._log_queue.task_done()
+
+                if not success:
+                    # AsyncRedisClient 内部已经执行有限重试；这里不再回灌队列，
+                    # 避免 Redis 长期不可用时形成无限重试并阻塞 close()。
+                    print(f"[RedisSink] Redis发送最终失败，丢弃 {len(batch)} 条日志")
 
             except asyncio.TimeoutError:
                 if not self._running:
@@ -320,16 +334,16 @@ class RedisSink:
         Returns:
             LogRecord对象
         """
-        # 获取调用者信息
+        record_dict = getattr(message, "record", {})
         caller_info = self.field_extractor.get_caller_info(depth=3)
+
+        # 优先复用 Loguru 已经解析好的调用者字段，避免热路径重复 inspect。
+        method = str(record_dict.get("function") or caller_info.method_name_safe)
+        class_name = str(record_dict.get("name") or caller_info.class_name_safe)
 
         # 获取系统信息
         system_info = self.field_extractor.get_system_info()
 
-        # 获取时间信息
-        import datetime
-
-        record_dict = getattr(message, "record", {})
         log_time = record_dict.get("time")
 
         # 如果 log_time 为 None，使用当前时间
@@ -341,10 +355,10 @@ class RedisSink:
             server_name=system_info.server_name,
             app_name=self.config.app_name,
             env=self.config.env,
-            method=caller_info.method_name_safe,
+            method=method,
             content=str(record_dict.get("message", "")),
             log_level=getattr(record_dict.get("level", {}), "name", "INFO"),
-            class_name=caller_info.class_name_safe,
+            class_name=class_name,
             thread_name=system_info.thread_name,
             seq=self.field_extractor.get_next_seq(),
             date_time=self.field_extractor.format_datetime(log_time),
@@ -366,7 +380,10 @@ class RedisSink:
         self._running = False
 
         if self._log_queue:
-            await self._log_queue.join()
+            try:
+                await asyncio.wait_for(self._log_queue.join(), timeout=10.0)
+            except asyncio.TimeoutError:
+                print("[RedisSink] 等待队列清空超时，将继续关闭并清理剩余日志")
 
         if self._consumer_task and not self._consumer_task.done():
             try:
@@ -392,7 +409,12 @@ class RedisSink:
 
             if remaining_logs:
                 print(f"[RedisSink] 发送剩余的 {len(remaining_logs)} 条队列日志...")
-                await self.redis_client.send_log_records(remaining_logs)
+                success = await self.redis_client.send_log_records(remaining_logs)
+                if not success:
+                    print(
+                        "[RedisSink] 剩余队列日志发送失败，"
+                        f"丢弃 {len(remaining_logs)} 条日志"
+                    )
 
         await self.redis_client.disconnect()
 
@@ -409,6 +431,12 @@ class RedisSink:
 
         self._closing = True
 
+        if self._runtime is None:
+            with self._temp_buffer_lock:
+                has_buffered_logs = bool(self._temp_buffer)
+            if not has_buffered_logs:
+                return
+
         try:
             # 统一在专用事件循环中完成所有清理动作
             await self._run_in_runtime(self._async_close())
@@ -419,7 +447,7 @@ class RedisSink:
 
         print("[RedisSink] 关闭流程结束")
 
-    async def __aenter__(self) -> "RedisSink":  # type: ignore
+    async def __aenter__(self) -> "RedisSink":
         """异步上下文管理器入口"""
         # 上下文进入时提前初始化，避免在日志产生后才启动消费者
         await self._run_in_runtime(self._ensure_initialized())

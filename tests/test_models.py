@@ -1,20 +1,21 @@
 """测试数据模型模块"""
 
+
 import pytest
-from datetime import datetime
+
 from plumelog_loguru.models import (
-    LogRecord,
-    CallerInfo,
-    SystemInfo,
-    RedisConnectionInfo,
     BatchConfig,
+    CallerInfo,
+    LogRecord,
+    RedisConnectionInfo,
+    SystemInfo,
 )
 
 
 class TestLogRecord:
     """测试LogRecord数据模型"""
 
-    def test_create_log_record(self):
+    def test_create_log_record(self) -> None:
         """测试创建日志记录"""
         log_record = LogRecord(
             server_name="192.168.1.100",
@@ -35,7 +36,7 @@ class TestLogRecord:
         assert log_record.content == "测试日志内容"
         assert log_record.seq == 1
 
-    def test_to_dict(self):
+    def test_to_dict(self) -> None:
         """测试转换为字典格式"""
         log_record = LogRecord(
             server_name="192.168.1.100",
@@ -64,7 +65,7 @@ class TestLogRecord:
 class TestCallerInfo:
     """测试CallerInfo数据模型"""
 
-    def test_caller_info_with_values(self):
+    def test_caller_info_with_values(self) -> None:
         """测试有值的调用者信息"""
         caller_info = CallerInfo(class_name="MyClass", method_name="my_method")
 
@@ -73,7 +74,7 @@ class TestCallerInfo:
         assert caller_info.class_name_safe == "MyClass"
         assert caller_info.method_name_safe == "my_method"
 
-    def test_caller_info_with_none_values(self):
+    def test_caller_info_with_none_values(self) -> None:
         """测试None值的调用者信息"""
         caller_info = CallerInfo(class_name=None, method_name=None)
 
@@ -86,7 +87,7 @@ class TestCallerInfo:
 class TestSystemInfo:
     """测试SystemInfo数据模型"""
 
-    def test_system_info(self):
+    def test_system_info(self) -> None:
         """测试系统信息创建"""
         system_info = SystemInfo(
             server_name="192.168.1.100", host_name="test-host", thread_name="MainThread"
@@ -100,7 +101,7 @@ class TestSystemInfo:
 class TestRedisConnectionInfo:
     """测试Redis连接信息模型"""
 
-    def test_redis_connection_info(self):
+    def test_redis_connection_info(self) -> None:
         """测试Redis连接信息创建"""
         redis_info = RedisConnectionInfo(
             host="localhost", port=6379, db=0, password="secret", max_connections=10
@@ -112,7 +113,7 @@ class TestRedisConnectionInfo:
         assert redis_info.password == "secret"
         assert redis_info.max_connections == 10
 
-    def test_redis_connection_info_validation(self):
+    def test_redis_connection_info_validation(self) -> None:
         """测试Redis连接信息验证"""
         # 测试端口范围验证
         with pytest.raises(ValueError):
@@ -134,7 +135,7 @@ class TestRedisConnectionInfo:
 class TestBatchConfig:
     """测试批处理配置模型"""
 
-    def test_batch_config(self):
+    def test_batch_config(self) -> None:
         """测试批处理配置创建"""
         batch_config = BatchConfig(
             batch_size=50, batch_interval_seconds=1.5, queue_max_size=5000
@@ -144,7 +145,7 @@ class TestBatchConfig:
         assert batch_config.batch_interval_seconds == 1.5
         assert batch_config.queue_max_size == 5000
 
-    def test_batch_config_validation(self):
+    def test_batch_config_validation(self) -> None:
         """测试批处理配置验证"""
         # 测试批量大小验证
         with pytest.raises(ValueError):

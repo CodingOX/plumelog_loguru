@@ -1,8 +1,11 @@
 """基础测试配置和工具函数"""
 
 import asyncio
+from collections.abc import Iterator
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+
 from plumelog_loguru import PlumelogSettings
 
 
@@ -22,7 +25,7 @@ def test_config() -> PlumelogSettings:
 
 
 @pytest.fixture
-def mock_redis():
+def mock_redis() -> AsyncMock:
     """模拟Redis客户端"""
     mock = AsyncMock()
     mock.ping.return_value = True
@@ -32,7 +35,7 @@ def mock_redis():
 
 
 @pytest.fixture
-def event_loop():
+def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
     """提供事件循环用于异步测试"""
     loop = asyncio.new_event_loop()
     yield loop

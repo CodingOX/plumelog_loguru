@@ -4,10 +4,12 @@
 支持从环境变量读取配置，并提供合理的默认值。
 """
 
+from urllib.parse import quote
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .models import RedisConnectionInfo, BatchConfig
+from .models import BatchConfig, RedisConnectionInfo
 
 
 class PlumelogSettings(BaseSettings):
@@ -86,8 +88,9 @@ class PlumelogSettings(BaseSettings):
             Redis连接URL字符串
         """
         if self.redis_password:
+            password = quote(self.redis_password, safe="")
             return (
-                f"redis://:{self.redis_password}@{self.redis_host}:"
+                f"redis://:{password}@{self.redis_host}:"
                 f"{self.redis_port}/{self.redis_db}"
             )
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"

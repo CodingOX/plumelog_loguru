@@ -12,7 +12,7 @@ import os
 from typing import Any
 
 import redis.asyncio as redis
-from redis.exceptions import ConnectionError, RedisError
+from redis.exceptions import ConnectionError, RedisError, TimeoutError
 
 from .config import PlumelogSettings
 from .models import LogRecord
@@ -234,11 +234,12 @@ class AsyncRedisClient:
         """
         pid = os.getpid()
         print(
-            f"[Plumelog][PID:{pid}] Redis发送失败 (尝试 {attempt + 1}/{self.retry_count}): {error}"
+            "[Plumelog][PID:"
+            f"{pid}] Redis发送失败 (尝试 {attempt + 1}/{self.retry_count}): {error}"
         )
 
         # 如果是连接错误，标记为未连接状态
-        if isinstance(error, (ConnectionError, OSError)):
+        if isinstance(error, (ConnectionError, TimeoutError, OSError)):
             await self._cleanup_on_error()
 
         if attempt < self.retry_count - 1:
