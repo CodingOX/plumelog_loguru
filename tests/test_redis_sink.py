@@ -186,13 +186,15 @@ def test_redis_sink_uses_temp_buffer_when_pending_submit_limit_is_reached(
     asyncio.run(sink.close())
 
 
-def test_redis_sink_does_not_start_runtime_until_first_use(
+def test_redis_sink_starts_runtime_during_construction(
     test_config: PlumelogSettings,
 ) -> None:
-    """构造 RedisSink 不应立即启动后台线程和事件循环"""
+    """构造 RedisSink 时应提前准备 runtime，避免首次写日志时触发 asyncio 内部日志"""
     sink = RedisSink(test_config)
 
-    assert sink._runtime is None
+    assert sink._runtime is not None
+    assert sink._runtime._thread.is_alive()
+    assert not sink._initialized
 
     asyncio.run(sink.close())
 

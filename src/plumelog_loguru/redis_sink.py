@@ -104,8 +104,10 @@ class RedisSink:
         )
         self._temp_buffer_lock = threading.Lock()
 
-        # 专用运行时按需启动，避免仅构造 sink 时就占用后台线程。
-        self._runtime: _AsyncRuntime | None = None
+        # 事件循环线程在构造阶段就准备好，避免首次写日志时触发 asyncio
+        # 内部调试日志并在第三方 logging -> Loguru 桥接场景下产生 sink 重入。
+        # 这里只提前准备 runtime；Redis 连接和消费者任务仍保持懒初始化。
+        self._runtime: _AsyncRuntime | None = _AsyncRuntime()
         self._runtime_lock = threading.Lock()
         self._closing = False
         self._pending_submit_limit = (
