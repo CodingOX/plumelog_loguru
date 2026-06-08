@@ -33,7 +33,7 @@ from .models import BatchConfig, CallerInfo, LogRecord, RedisConnectionInfo, Sys
 from .redis_client import AsyncRedisClient
 from .redis_sink import RedisSink, create_redis_sink
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 __author__ = "Alistar Max"
 __email__ = "codingox@gmail.com"
 
