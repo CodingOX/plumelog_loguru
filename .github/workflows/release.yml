@@ -69,7 +69,7 @@ jobs:
 
       # 将构建产物上传为 artifact，供 publish job 使用
       - name: Upload dist artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -100,7 +100,7 @@ jobs:
 
       # 从上一个 job 下载构建产物（不重新构建，保证产物一致性）
       - name: Download dist artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
@@ -125,7 +125,7 @@ jobs:
     steps:
       # 下载 build job 产生的 wheel + sdist
       - name: Download dist artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
